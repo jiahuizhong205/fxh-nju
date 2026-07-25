@@ -1,0 +1,65 @@
+version: "3.8"
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: fuxiaohe
+      POSTGRES_PASSWORD: fuxiaohe_dev
+      POSTGRES_DB: fuxiaohe
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ../migrations:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fuxiaohe"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  api:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.api
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://fuxiaohe:fuxiaohe_dev@postgres:5432/fuxiaohe
+      REDIS_URL: redis://redis:6379/0
+      EMBEDDING_MODEL: BAAI/bge-small-zh-v1.5
+      LLM_BASE_URL: ${LLM_BASE_URL:-http://host.docker.internal:11434/v1}
+      LLM_MODEL: ${LLM_MODEL:-qwen2.5:7b}
+    volumes:
+      - ../../apps/api:/app/apps/api
+      - ../../services:/app/services
+      - ../../packages:/app/packages
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.web
+    ports:
+      - "5173:5173"
+    volumes:
+      - ../../apps/web/src:/app/apps/web/src
+    depends_on:
+      - api
+
+volumes:
+  pgdata:
