@@ -1,5 +1,7 @@
 """福小禾 API——FastAPI 入口。"""
 
+import logging
+import sys
 from contextlib import asynccontextmanager
 from uuid import uuid4
 
@@ -10,12 +12,29 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from apps.api.config import settings
 from apps.api.database import async_session, init_db
 from apps.api.routes import chat, knowledge, profile
+from apps.api.middleware import (
+    RateLimitMiddleware,
+    SecurityHeadersMiddleware,
+    TraceMiddleware,
+    RequestLogMiddleware,
+)
+
+# 结构化日志
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(name)s] %(levelname)s %(message)s",
+    stream=sys.stdout,
+)
+
+logger = logging.getLogger("fuxiaohe")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    logger.info("fuxiaohe starting...")
     await init_db()
     yield
+    logger.info("fuxiaohe shutting down...")
 
 
 app = FastAPI(
@@ -25,12 +44,23 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["http://localhost:5173", "http://localhost:3000"],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
+    allow_headers=["Content-Type", "Authorization", "X-Trace-Id"],
+)
+
+# 安全中间件（后加的先执行——Starlette 洋葱模型）
+app.add_middleware(RequestLogMiddleware)
+app.add_middleware(TraceMiddleware)
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(
+    RateLimitMiddleware,
+    max_requests=settings.rate_limit_requests,
+    window_seconds=settings.rate_limit_window_seconds,
 )
 
 app.include_router(chat.router, prefix="/api/v1", tags=["chat"])

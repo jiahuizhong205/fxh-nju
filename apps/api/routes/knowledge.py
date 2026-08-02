@@ -8,9 +8,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.api.database import get_db
 from apps.api.models import Document
+from apps.api.config import settings
 from services.rag.ingestion import ingest_document
 
 router = APIRouter()
+
+VALID_TRUST_LEVELS = {"S", "A", "B", "C"}
+VALID_SOURCE_TYPES = {"policy", "regulation", "course_catalog", "job_posting", "other"}
+VALID_CONTENT_TYPES = {"text/plain", "text/markdown", "application/pdf"}
 
 
 @router.post("/knowledge/documents")
@@ -21,7 +26,17 @@ async def upload_document(
     source_type: str = Form("policy"),
     db: AsyncSession = Depends(get_db),
 ):
+    if trust_level not in VALID_TRUST_LEVELS:
+        raise HTTPException(status_code=400, detail=f"trust_level 须为 {VALID_TRUST_LEVELS} 之一")
+    if source_type not in VALID_SOURCE_TYPES:
+        raise HTTPException(status_code=400, detail=f"source_type 须为 {VALID_SOURCE_TYPES} 之一")
+
     content = await file.read()
+    if len(content) > settings.max_upload_bytes:
+        raise HTTPException(status_code=400, detail=f"文件超过 {settings.max_upload_bytes // 1024 // 1024} MB 限制")
+    if file.content_type and file.content_type not in VALID_CONTENT_TYPES:
+        raise HTTPException(status_code=400, detail=f"不支持的文件类型: {file.content_type}")
+
     text = content.decode("utf-8")
     try:
         doc = await ingest_document(
@@ -41,6 +56,13 @@ async def ingest_text(
     source_type: str = Form("policy"),
     db: AsyncSession = Depends(get_db),
 ):
+    if trust_level not in VALID_TRUST_LEVELS:
+        raise HTTPException(status_code=400, detail=f"trust_level 须为 {VALID_TRUST_LEVELS} 之一")
+    if source_type not in VALID_SOURCE_TYPES:
+        raise HTTPException(status_code=400, detail=f"source_type 须为 {VALID_SOURCE_TYPES} 之一")
+    if len(content) > settings.max_upload_bytes:
+        raise HTTPException(status_code=400, detail=f"内容超过 {settings.max_upload_bytes // 1024 // 1024} MB 限制")
+
     try:
         doc = await ingest_document(
             db, title=title, content=content,

@@ -13,6 +13,10 @@ class Settings(BaseSettings):
     chunk_size: int = 500
     chunk_overlap: int = 80
     top_k_retrieval: int = 8
+    rate_limit_requests: int = 60
+    rate_limit_window_seconds: int = 60
+    max_upload_bytes: int = 10 * 1024 * 1024  # 10 MB
+    api_key: str = ""
 
 
 settings = Settings()

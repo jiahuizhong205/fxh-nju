@@ -78,6 +78,8 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
     """发送消息，返回 SSE 流。"""
     if not request.message.strip():
         raise HTTPException(status_code=400, detail="消息不能为空")
+    if len(request.message) > 10000:
+        raise HTTPException(status_code=400, detail="消息过长，限制 10000 字符")
 
     # 创建或获取会话
     if request.thread_id:
