@@ -100,13 +100,101 @@ def test_ingestion_hash_dedup():
 
 
 def test_embedding_fallback():
-    """验证嵌入回退机制：本地模型不可用时走 API 模式。"""
     from services.rag import retrieval
     retrieval._embedding_model = None
     retrieval._use_api = False
     retrieval._init_local_model()
     mode = "API" if retrieval._use_api else "local"
     print(f"  PASS test_embedding_fallback (mode={mode})")
+
+
+def test_knowledge_graph_nodes():
+    """验证知识图谱包含新闻学课程节点。"""
+    from services.rag.knowledge_graph import NEWS_GRAPH
+
+    courses = [n for n in NEWS_GRAPH["nodes"] if n.label == "Course"]
+    kps = [n for n in NEWS_GRAPH["nodes"] if n.label == "KnowledgePoint"]
+    skills = [n for n in NEWS_GRAPH["nodes"] if n.label == "Skill"]
+    careers = [n for n in NEWS_GRAPH["nodes"] if n.label == "CareerPath"]
+
+    assert len(courses) >= 4, f"课程节点不足: {len(courses)}"
+    assert len(kps) >= 8, f"知识点节点不足: {len(kps)}"
+    assert len(skills) >= 4, f"技能节点不足: {len(skills)}"
+    assert len(careers) >= 2, f"职业节点不足: {len(careers)}"
+
+    # 验证边关系
+    teaches = [e for e in NEWS_GRAPH["edges"] if e.relation == "TEACHES"]
+    requires = [e for e in NEWS_GRAPH["edges"] if e.relation == "REQUIRES"]
+    assert len(teaches) >= 6
+    assert len(requires) >= 2
+    print("  PASS test_knowledge_graph_nodes")
+
+
+def test_knowledge_tree_generation():
+    """验证知识树生成。"""
+    from services.rag.knowledge_graph import get_knowledge_tree
+
+    tree = get_knowledge_tree(["新闻采访与写作", "新闻编辑学"])
+    assert len(tree["nodes"]) >= 4  # 至少 2 课程 + 多个知识点
+    assert len(tree["edges"]) >= 2
+
+    node_names = {n["name"] for n in tree["nodes"]}
+    assert "新闻采访与写作" in node_names
+    assert "新闻编辑学" in node_names
+    print("  PASS test_knowledge_tree_generation")
+
+
+def test_career_matching():
+    """验证岗位匹配返回结果。"""
+    from services.planning.career_engine import match_jobs
+
+    matches = match_jobs("汉语言文学", "新闻学")
+    assert len(matches) >= 2
+    assert matches[0]["match_score"] > 0
+    assert any("复合" in r for m in matches for r in m.get("match_reasons", []))
+    print("  PASS test_career_matching")
+
+
+def test_tutor_agent_import():
+    """验证 Tutor Agent 可编译。"""
+    from unittest.mock import AsyncMock
+    from sqlalchemy.ext.asyncio import AsyncSession
+    from services.agent_runtime.tutor_agent import TutorAgent
+
+    db = AsyncMock(spec=AsyncSession)
+    agent = TutorAgent(db)
+    g = agent.build()
+    nodes = {n for n in g.get_graph().nodes}
+    assert "explain" in nodes
+    print("  PASS test_tutor_agent_import")
+
+
+def test_career_agent_import():
+    """验证 Career Agent 可编译。"""
+    from unittest.mock import AsyncMock
+    from sqlalchemy.ext.asyncio import AsyncSession
+    from services.agent_runtime.career_agent import CareerAgent
+
+    db = AsyncMock(spec=AsyncSession)
+    agent = CareerAgent(db)
+    g = agent.build()
+    nodes = {n for n in g.get_graph().nodes}
+    assert "match" in nodes
+    print("  PASS test_career_agent_import")
+
+
+def test_graph_has_all_agents():
+    """验证根图包含全部 5 个 Agent。"""
+    from unittest.mock import AsyncMock
+    from sqlalchemy.ext.asyncio import AsyncSession
+    from services.agent_runtime.graph import RootGraph
+
+    db = AsyncMock(spec=AsyncSession)
+    g = RootGraph(db)
+    nodes = {n for n in g.compiled.get_graph().nodes}
+    for name in ["policy", "recommend", "schedule", "tutor", "career"]:
+        assert name in nodes, f"根图缺少 {name} 节点"
+    print("  PASS test_graph_has_all_agents")
 
 
 def test_version_governance_model():
@@ -272,6 +360,12 @@ def main():
         test_course_planner_campus_warning,
         test_plan_agent_import,
         test_graph_has_schedule,
+        test_knowledge_graph_nodes,
+        test_knowledge_tree_generation,
+        test_career_matching,
+        test_tutor_agent_import,
+        test_career_agent_import,
+        test_graph_has_all_agents,
     ]
 
     passed = 0

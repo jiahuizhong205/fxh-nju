@@ -18,6 +18,8 @@ function isActive(path: string) {
         <router-link to="/" :class="{ active: isActive('/') }">对话</router-link>
         <router-link to="/profile" :class="{ active: isActive('/profile') }">画像</router-link>
         <router-link to="/recommend" :class="{ active: isActive('/recommend') }">推荐</router-link>
+        <router-link to="/tutor" :class="{ active: isActive('/tutor') }">伴学</router-link>
+        <router-link to="/career" :class="{ active: isActive('/career') }">职业</router-link>
         <router-link to="/knowledge" :class="{ active: isActive('/knowledge') }">知识库</router-link>
       </nav>
     </header>

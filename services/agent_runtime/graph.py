@@ -9,6 +9,8 @@ from services.agent_runtime.state import AssistantState
 from services.agent_runtime.policy_agent import PolicyAgent
 from services.agent_runtime.recommend_agent import RecommendAgent
 from services.agent_runtime.plan_agent import PlanAgent
+from services.agent_runtime.tutor_agent import TutorAgent
+from services.agent_runtime.career_agent import CareerAgent
 
 
 async def guard_input(state: AssistantState) -> dict:
@@ -23,7 +25,7 @@ async def guard_input(state: AssistantState) -> dict:
 
 async def route_intent(state: AssistantState) -> dict:
     intent = state.get("intent", "policy")
-    valid = {"policy", "recommend", "schedule"}
+    valid = {"policy", "recommend", "schedule", "tutor", "career"}
     if intent not in valid:
         intent = "policy"
     return {"intent": intent}
@@ -48,6 +50,8 @@ class RootGraph:
         self.policy = PolicyAgent(db)
         self.recommend = RecommendAgent(db)
         self.plan = PlanAgent(db)
+        self.tutor = TutorAgent(db)
+        self.career = CareerAgent(db)
         self._graph = self._build(checkpointer)
 
     def _build(self, checkpointer: Any = None) -> StateGraph:
@@ -57,6 +61,8 @@ class RootGraph:
         builder.add_node("policy", self.policy.build())
         builder.add_node("recommend", self.recommend.build())
         builder.add_node("schedule", self.plan.build())
+        builder.add_node("tutor", self.tutor.build())
+        builder.add_node("career", self.career.build())
         builder.add_node("respond", build_response)
 
         builder.add_edge(START, "guard")
@@ -64,11 +70,14 @@ class RootGraph:
         builder.add_conditional_edges(
             "route",
             lambda s: s.get("intent", "policy"),
-            {"policy": "policy", "recommend": "recommend", "schedule": "schedule"},
+            {"policy": "policy", "recommend": "recommend", "schedule": "schedule",
+             "tutor": "tutor", "career": "career"},
         )
         builder.add_edge("policy", "respond")
         builder.add_edge("recommend", "respond")
         builder.add_edge("schedule", "respond")
+        builder.add_edge("tutor", "respond")
+        builder.add_edge("career", "respond")
         builder.add_edge("respond", END)
 
         if checkpointer:

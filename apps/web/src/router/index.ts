@@ -23,6 +23,16 @@ const router = createRouter({
       name: 'recommend',
       component: () => import('../views/RecommendView.vue'),
     },
+    {
+      path: '/tutor',
+      name: 'tutor',
+      component: () => import('../views/TutorView.vue'),
+    },
+    {
+      path: '/career',
+      name: 'career',
+      component: () => import('../views/CareerView.vue'),
+    },
   ],
 })
 
