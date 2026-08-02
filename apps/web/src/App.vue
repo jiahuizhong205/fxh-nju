@@ -1,5 +1,12 @@
 <script setup lang="ts">
-import { RouterView } from 'vue-router'
+import { RouterView, useRouter, useRoute } from 'vue-router'
+
+const router = useRouter()
+const route = useRoute()
+
+function isActive(path: string) {
+  return route.path === path
+}
 </script>
 
 <template>
@@ -7,6 +14,12 @@ import { RouterView } from 'vue-router'
     <header class="app-header">
       <h1>福小禾</h1>
       <span class="subtitle">南大复合型人才学习助手</span>
+      <nav class="nav-links">
+        <router-link to="/" :class="{ active: isActive('/') }">对话</router-link>
+        <router-link to="/profile" :class="{ active: isActive('/profile') }">画像</router-link>
+        <router-link to="/recommend" :class="{ active: isActive('/recommend') }">推荐</router-link>
+        <router-link to="/knowledge" :class="{ active: isActive('/knowledge') }">知识库</router-link>
+      </nav>
     </header>
     <main class="app-main">
       <RouterView />
@@ -49,6 +62,19 @@ body {
 .app-header .subtitle {
   font-size: 0.85rem;
   opacity: 0.85;
+  flex: 1;
+}
+
+.nav-links {
+  display: flex; gap: 4px;
+}
+.nav-links a {
+  color: rgba(255,255,255,0.75); text-decoration: none;
+  padding: 4px 14px; border-radius: 16px; font-size: 0.85rem;
+  transition: background 0.15s;
+}
+.nav-links a:hover, .nav-links a.active {
+  background: rgba(255,255,255,0.2); color: #fff;
 }
 
 .app-main {

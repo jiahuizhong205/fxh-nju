@@ -45,7 +45,6 @@ class PolicyAgent:
         }
 
     async def generate(self, state: AssistantState) -> dict:
-        """基于检索结果生成回答"""
         evidence = state.get("evidence", [])
         messages = state.get("messages", [])
         query = messages[-1].content if messages else ""
@@ -61,16 +60,13 @@ class PolicyAgent:
                 "warnings": state.get("warnings", []) + ["无相关证据"],
             }
 
-        ctx = build_context([{
-            "chunk_id": e["evidence_id"],
-            "content": e["content"],
-            "document_title": e["title"],
-            "trust_level": e["trust_level"],
-            "score": e["score"],
-            "chunk_index": 0,
-            "metadata": {},
-            "valid_from": None,
-        } for e in evidence])
+        chunk_dicts = [{
+            "chunk_id": e["evidence_id"], "content": e["content"],
+            "document_title": e["title"], "trust_level": e["trust_level"],
+            "score": e["score"], "chunk_index": 0, "metadata": {}, "valid_from": None,
+        } for e in evidence]
+
+        ctx = build_context(chunk_dicts)
 
         system = SystemMessage(content=f"""你是南京大学辅修政策答疑助手"福小禾"。请根据以下政策文档回答用户问题。
 
@@ -85,34 +81,84 @@ class PolicyAgent:
 {ctx}""")
 
         response = await self.llm.ainvoke([system, HumanMessage(content=query)])
-        citations = build_citations([{
-            "chunk_id": e["evidence_id"],
-            "document_title": e["title"],
-            "trust_level": e["trust_level"],
-            "score": e["score"],
-            "chunk_index": 0,
-            "content": e["content"],
-            "metadata": {},
-            "valid_from": None,
-        } for e in evidence[:5]])
+        citations = build_citations(chunk_dicts[:5])
+        top_score = evidence[0]["score"]
 
         return {
             "answer": {
                 "content": response.content,
                 "citations": citations,
-                "confidence": evidence[0]["score"] if evidence else 0.0,
+                "confidence": top_score,
             },
-            "confidence": evidence[0]["score"] if evidence else 0.0,
+            "confidence": top_score,
             "warnings": state.get("warnings", []),
+            "_evidence": evidence,
+        }
+
+    async def verify(self, state: AssistantState) -> dict:
+        """校验引用覆盖：各项政策断言是否有来源支撑。"""
+        answer = state.get("answer", {})
+        evidence = state.get("evidence", [])
+        warnings = list(state.get("warnings", []))
+
+        content = answer.get("content", "") if isinstance(answer, dict) else str(answer)
+        confidence = state.get("confidence", 0.0)
+
+        # 无证据 → 已有拒答，不改
+        if not evidence or not content.strip():
+            return {"warnings": warnings}
+
+        # 低分检索 → 标记
+        if confidence < 0.3:
+            warnings.append("检索相关度较低，回答可能不准确")
+            confidence = max(confidence, 0.2)
+
+        # LLM 校验引用覆盖
+        evidence_texts = "\n---\n".join(
+            f"[{i+1}] {e.get('content', '')[:300]}" for i, e in enumerate(evidence[:5])
+        )
+        check_prompt = SystemMessage(content=f"""检查以下回答中的每条政策事实是否被提供的文档所支持。
+
+证据文档：
+{evidence_texts}
+
+回答：
+{content}
+
+判断规则：
+- 若所有关键事实（学分、证书、流程等）均被至少一条证据覆盖 → covered
+- 若存在无法从证据中验证的事实 → uncoverable
+- 若证据不足但仍回复了部分合理推断 → partial
+
+只回复: covered, partial, 或 uncoverable，以及一句话原因。""")
+
+        try:
+            check_resp = await self.llm.ainvoke([check_prompt])
+            verdict = check_resp.content.lower()
+
+            if "uncoverable" in verdict:
+                warnings.append("部分回答内容无法从知识库验证")
+                confidence = min(confidence, 0.4)
+            elif "partial" in verdict:
+                warnings.append("部分内容为合理推断，非直接引用")
+                confidence = min(confidence, 0.6)
+        except Exception:
+            pass  # 校验失败不影响回答
+
+        return {
+            "confidence": confidence,
+            "warnings": warnings,
         }
 
     def build(self) -> StateGraph:
         builder = StateGraph(AssistantState)
         builder.add_node("retrieve", self.retrieve)
         builder.add_node("generate", self.generate)
+        builder.add_node("verify", self.verify)
         builder.add_edge(START, "retrieve")
         builder.add_edge("retrieve", "generate")
-        builder.add_edge("generate", END)
+        builder.add_edge("generate", "verify")
+        builder.add_edge("verify", END)
         return builder.compile()
 
 

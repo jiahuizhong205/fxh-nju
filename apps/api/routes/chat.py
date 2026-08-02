@@ -18,13 +18,12 @@ from services.agent_runtime.graph import RootGraph
 router = APIRouter()
 
 
-async def _stream_answer(db: AsyncSession, thread_id: UUID, query: str, conversation_id: UUID):
-    """SSE 流：node_update → retrieve → generate → final。"""
+async def _stream_answer(db: AsyncSession, thread_id: UUID, query: str, conversation_id: UUID, intent: str = "policy"):
     graph = RootGraph(db).compiled
 
     state: AssistantState = {
         "messages": [HumanMessage(content=query)],
-        "intent": "policy",
+        "intent": intent,
     }
 
     config = {"configurable": {"thread_id": str(thread_id)}}
@@ -100,7 +99,7 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
     thread_id = uuid4()
 
     return StreamingResponse(
-        _stream_answer(db, thread_id, request.message, conversation_id),
+        _stream_answer(db, thread_id, request.message, conversation_id, request.intent or "policy"),
         media_type="text/event-stream",
         headers={
             "X-Conversation-Id": str(conversation_id),

@@ -76,6 +76,7 @@ async def hybrid_search(
         LEFT JOIN vector_matches v ON c.id = v.id
         LEFT JOIN text_matches t ON c.id = t.id
         WHERE d.trust_level = ANY(:trust_levels)
+          AND d.is_active = true
           AND (v.id IS NOT NULL OR t.id IS NOT NULL)
         ORDER BY score DESC
         LIMIT :k

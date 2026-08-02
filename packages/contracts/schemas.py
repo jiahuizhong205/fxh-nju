@@ -24,6 +24,7 @@ class AssistantAnswer(BaseModel):
 class ChatRequest(BaseModel):
     message: str
     thread_id: UUID | None = None
+    intent: str | None = None  # policy / recommend / schedule / tutor / career
 
 
 class ChatEvent(BaseModel):

@@ -1,11 +1,13 @@
-"""知识库管理 API——文档上传与摄取。"""
+"""知识库管理 API——文档上传、摄取与版本治理。"""
 
-from uuid import uuid4
+from uuid import uuid4, UUID
 
-from fastapi import APIRouter, Depends, UploadFile, File, Form
+from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.api.database import get_db
+from apps.api.models import Document
 from services.rag.ingestion import ingest_document
 
 router = APIRouter()
@@ -19,20 +21,14 @@ async def upload_document(
     source_type: str = Form("policy"),
     db: AsyncSession = Depends(get_db),
 ):
-    """上传政策文档并摄入知识库。"""
     content = await file.read()
     text = content.decode("utf-8")
-
     try:
         doc = await ingest_document(
             db, title=title, content=text,
             trust_level=trust_level, source_type=source_type,
         )
-        return {
-            "document_id": str(doc.id),
-            "title": doc.title,
-            "trust_level": doc.trust_level,
-        }
+        return {"document_id": str(doc.id), "title": doc.title, "trust_level": doc.trust_level}
     except ValueError as e:
         return {"error": str(e), "status": "duplicate"}
 
@@ -45,16 +41,58 @@ async def ingest_text(
     source_type: str = Form("policy"),
     db: AsyncSession = Depends(get_db),
 ):
-    """通过文本内容摄入知识。"""
     try:
         doc = await ingest_document(
             db, title=title, content=content,
             trust_level=trust_level, source_type=source_type,
         )
-        return {
-            "document_id": str(doc.id),
-            "title": doc.title,
-            "trust_level": doc.trust_level,
-        }
+        return {"document_id": str(doc.id), "title": doc.title, "trust_level": doc.trust_level}
     except ValueError as e:
         return {"error": str(e), "status": "duplicate"}
+
+
+@router.get("/knowledge/documents")
+async def list_documents(
+    trust_level: str | None = None,
+    is_active: bool | None = None,
+    db: AsyncSession = Depends(get_db),
+):
+    stmt = select(Document).order_by(Document.created_at.desc())
+    if trust_level:
+        stmt = stmt.where(Document.trust_level == trust_level)
+    if is_active is not None:
+        stmt = stmt.where(Document.is_active == is_active)
+    result = await db.execute(stmt)
+    docs = result.scalars().all()
+    return [{
+        "id": str(d.id), "title": d.title,
+        "trust_level": d.trust_level, "source_type": d.source_type,
+        "knowledge_version": d.knowledge_version, "is_active": d.is_active,
+        "valid_from": d.valid_from.isoformat() if d.valid_from else None,
+        "valid_to": d.valid_to.isoformat() if d.valid_to else None,
+        "created_at": d.created_at.isoformat(),
+    } for d in docs]
+
+
+@router.post("/knowledge/versions/{version}/activate")
+async def activate_version(version: str, db: AsyncSession = Depends(get_db)):
+    await db.execute(update(Document).values(is_active=False))
+    result = await db.execute(
+        update(Document)
+        .where(Document.knowledge_version == version)
+        .values(is_active=True)
+        .returning(Document.id)
+    )
+    await db.commit()
+    ids = [str(r[0]) for r in result.fetchall()]
+    return {"activated_version": version, "document_count": len(ids), "document_ids": ids}
+
+
+@router.delete("/knowledge/documents/{doc_id}")
+async def delete_document(doc_id: UUID, db: AsyncSession = Depends(get_db)):
+    doc = await db.get(Document, doc_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="文档不存在")
+    doc.is_active = False
+    await db.commit()
+    return {"document_id": str(doc_id), "status": "deactivated"}

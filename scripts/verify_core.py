@@ -105,9 +105,150 @@ def test_embedding_fallback():
     retrieval._embedding_model = None
     retrieval._use_api = False
     retrieval._init_local_model()
-    # 网络不通时预期走 API fallback
     mode = "API" if retrieval._use_api else "local"
     print(f"  PASS test_embedding_fallback (mode={mode})")
+
+
+def test_version_governance_model():
+    """验证 Document 模型包含版本治理字段。"""
+    from apps.api.models import Document
+    doc = Document(title="测试", source_type="policy", trust_level="S",
+                   file_hash="abc", raw_path="/tmp/test",
+                   knowledge_version="v2", is_active=True)
+    assert doc.knowledge_version == "v2"
+    assert doc.is_active is True
+    print("  PASS test_version_governance_model")
+
+
+def test_evidence_verifier_state():
+    """验证 evidence 状态 reducer 合并。"""
+    from services.agent_runtime.state import merge_evidence
+
+    e1 = [{"evidence_id": "e1", "trust_level": "S"}]
+    e2 = [{"evidence_id": "e2", "trust_level": "A"}]
+    merged = merge_evidence(e1, e2)
+    assert len(merged) == 2
+    print("  PASS test_evidence_verifier_state")
+
+
+def test_hybrid_search_sql_has_active_filter():
+    with open("services/rag/retrieval.py", encoding="utf-8") as f:
+        code = f.read()
+    assert "d.is_active = true" in code, "retrieval must filter by is_active"
+    print("  PASS test_hybrid_search_sql_has_active_filter")
+
+
+def test_recommendation_hard_filter():
+    """验证硬过滤：文科生不求高数 → 计算机系应被过滤。"""
+    from services.planning.recommendation_engine import PROGRAMS, hard_filter
+
+    profile = {
+        "major": "汉语言文学", "grade": "大二",
+        "campus": "仙林校区", "campus_flexibility": False,
+        "math_willingness": False, "certificate_goal": "degree",
+        "credit_budget": 60,
+    }
+    cs = next(p for p in PROGRAMS if p["name"] == "计算机科学与技术")
+    result = hard_filter(cs, profile)
+    # 应该因数学门槛被标记
+    has_math_warning = any("高等数学" in r for r in result.reasons)
+    assert has_math_warning, f"应有数学门槛警告: {result.reasons}"
+    # 仙林↔仙林不应有校区警告
+    has_campus_block = any("不可通勤" in r for r in result.reasons)
+    assert not has_campus_block, f"同校区不应触发校区过滤: {result.reasons}"
+    print("  PASS test_recommendation_hard_filter")
+
+
+def test_recommendation_scoring():
+    """验证评分：计算机系对 CS 主修应有高空缺效率分。"""
+    from services.planning.recommendation_engine import score_program, PROGRAMS
+
+    profile = {"major": "计算机科学与技术", "interests": ["AI", "后端"], "career_goals": ""}
+    cs = next(p for p in PROGRAMS if p["name"] == "计算机科学与技术")
+    result = score_program(cs, profile)
+    assert result.scores["overlap_efficiency"] >= 0.5
+    assert result.total > 0
+    print("  PASS test_recommendation_scoring")
+
+
+def test_recommend_agent_import():
+    """验证 Recommend Agent 可导入和编译。"""
+    from unittest.mock import AsyncMock
+    from sqlalchemy.ext.asyncio import AsyncSession
+    from services.agent_runtime.recommend_agent import RecommendAgent
+
+    db = AsyncMock(spec=AsyncSession)
+    agent = RecommendAgent(db)
+    g = agent.build()
+    nodes = {n for n in g.get_graph().nodes}
+    assert "load_profile" in nodes
+    assert "recommend" in nodes
+    assert "report" in nodes
+    print("  PASS test_recommend_agent_import")
+
+
+def test_graph_has_recommend():
+    from unittest.mock import AsyncMock
+    from sqlalchemy.ext.asyncio import AsyncSession
+    from services.agent_runtime.graph import RootGraph
+
+    db = AsyncMock(spec=AsyncSession)
+    g = RootGraph(db)
+    nodes = {n for n in g.compiled.get_graph().nodes}
+    assert "recommend" in nodes, f"根图缺少 recommend 节点: {nodes}"
+    print("  PASS test_graph_has_recommend")
+
+
+def test_course_planner_generates_plan():
+    """验证课程规划器生成非空方案。"""
+    from services.planning.course_planner import generate_plan
+
+    profile = {"major": "汉语言文学", "grade": "大二", "campus": "仙林校区"}
+    result = generate_plan("新闻学", profile)
+    assert len(result.items) > 0, "应有课程项"
+    assert result.items[0].course
+    assert not result.infeasible, "新闻学+仙林不应不可行"
+    print("  PASS test_course_planner_generates_plan")
+
+
+def test_course_planner_campus_warning():
+    """验证跨校区规划产生警告。"""
+    from services.planning.course_planner import generate_plan
+
+    profile = {"major": "汉语言文学", "grade": "大二", "campus": "仙林校区"}
+    result = generate_plan("法学", profile)
+    # 法学在鼓楼，应有跨校区警告
+    has_campus = any("鼓楼" in w or "跨校区" in w for w in result.warnings)
+    assert has_campus, f"应有校区警告: {result.warnings}"
+    print("  PASS test_course_planner_campus_warning")
+
+
+def test_plan_agent_import():
+    """验证 Plan Agent 可导入和编译。"""
+    from unittest.mock import AsyncMock
+    from sqlalchemy.ext.asyncio import AsyncSession
+    from services.agent_runtime.plan_agent import PlanAgent
+
+    db = AsyncMock(spec=AsyncSession)
+    agent = PlanAgent(db)
+    g = agent.build()
+    nodes = {n for n in g.get_graph().nodes}
+    assert "plan" in nodes
+    assert "explain" in nodes
+    print("  PASS test_plan_agent_import")
+
+
+def test_graph_has_schedule():
+    """验证根图包含 schedule 路由。"""
+    from unittest.mock import AsyncMock
+    from sqlalchemy.ext.asyncio import AsyncSession
+    from services.agent_runtime.graph import RootGraph
+
+    db = AsyncMock(spec=AsyncSession)
+    g = RootGraph(db)
+    nodes = {n for n in g.compiled.get_graph().nodes}
+    assert "schedule" in nodes, f"根图缺少 schedule 节点: {nodes}"
+    print("  PASS test_graph_has_schedule")
 
 
 def main():
@@ -120,6 +261,17 @@ def main():
         test_config,
         test_graph_compile,
         test_ingestion_hash_dedup,
+        test_version_governance_model,
+        test_evidence_verifier_state,
+        test_hybrid_search_sql_has_active_filter,
+        test_recommendation_hard_filter,
+        test_recommendation_scoring,
+        test_recommend_agent_import,
+        test_graph_has_recommend,
+        test_course_planner_generates_plan,
+        test_course_planner_campus_warning,
+        test_plan_agent_import,
+        test_graph_has_schedule,
     ]
 
     passed = 0

@@ -18,12 +18,14 @@ class Document(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     title: Mapped[str] = mapped_column(String(500))
-    source_type: Mapped[str] = mapped_column(String(50))  # S/A/B/C
-    trust_level: Mapped[str] = mapped_column(String(1))
+    source_type: Mapped[str] = mapped_column(String(50))  # policy/catalog/faq
+    trust_level: Mapped[str] = mapped_column(String(1))  # S/A/B/C
     file_hash: Mapped[str] = mapped_column(String(64), unique=True)
     raw_path: Mapped[str] = mapped_column(Text)
     valid_from: Mapped[datetime] = mapped_column(DateTime, nullable=True)
     valid_to: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+    knowledge_version: Mapped[str] = mapped_column(String(20), default="v1")
+    is_active: Mapped[bool] = mapped_column(default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
@@ -37,6 +39,26 @@ class DocumentChunk(Base):
     embedding = mapped_column(Vector(384))  # bge-small-zh
     metadata_: Mapped[dict] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class StudentProfile(Base):
+    __tablename__ = "student_profiles"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    major: Mapped[str] = mapped_column(String(200))
+    grade: Mapped[str] = mapped_column(String(20))  # 大一/大二/大三/大四
+    campus: Mapped[str] = mapped_column(String(50), default="")  # 仙林/鼓楼/苏州
+    interests: Mapped[list] = mapped_column(JSON, default=list)
+    strengths: Mapped[list] = mapped_column(JSON, default=list)
+    career_goals: Mapped[str] = mapped_column(Text, default="")
+    math_willingness: Mapped[bool] = mapped_column(default=False)  # 是否愿意修高数
+    campus_flexibility: Mapped[bool] = mapped_column(default=False)  # 是否接受跨校区
+    credit_budget: Mapped[int] = mapped_column(default=0)  # 愿意投入的学分数
+    certificate_goal: Mapped[str] = mapped_column(String(20), default="")  # degree/cert/none
+    schedule_preferences: Mapped[dict] = mapped_column(JSON, default=dict)
+    version: Mapped[int] = mapped_column(default=1)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
 class Conversation(Base):
