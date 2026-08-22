@@ -16,7 +16,7 @@ watch(
   () => store.messages.length,
   async () => { await nextTick(); scrollBottom() },
 )
-watch(() => store.streamContent.value, async () => { await nextTick(); scrollBottom() })
+watch(() => store.streamContent, async () => { await nextTick(); scrollBottom() })
 
 function scrollBottom() {
   if (messagesEl.value) {

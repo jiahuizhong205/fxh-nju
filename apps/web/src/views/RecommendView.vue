@@ -18,9 +18,9 @@ async function getRecommendation() {
   reportContent.value = ''
 
   await new Promise((resolve) => {
-    store.streamContent.value = ''
-    store.streaming.value = true
-    store.statusText.value = '正在分析画像并推荐...'
+    store.streamContent = ''
+    store.streaming = true
+    store.statusText = '正在分析画像并推荐...'
 
     fetch('/api/v1/chat', {
       method: 'POST',
@@ -49,11 +49,11 @@ async function getRecommendation() {
         }
       }
       loading.value = false
-      store.streaming.value = false
+      store.streaming = false
       resolve(null)
     }).catch(() => {
       loading.value = false
-      store.streaming.value = false
+      store.streaming = false
       resolve(null)
     })
   })

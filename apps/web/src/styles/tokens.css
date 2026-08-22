@@ -1,0 +1,70 @@
+/* 设计 token — 从 Figma「复合型人才」设计稿提取（绿色自然主题） */
+:root {
+  /* 品牌色（绿系） */
+  --brand: #7faf8a;          /* 主绿，208 处 */
+  --brand-strong: #5a7a6b;   /* 深绿，182 处 */
+  --brand-ink: #2f3b35;      /* 墨绿，主文字/深色块，234 处 */
+  --brand-deep: #2b3a31;     /* 更深绿，18 处 */
+
+  /* 文字 */
+  --text-primary: #2f3b35;
+  --text-secondary: #6b6055;
+  --text-muted: #8e8c86;
+  --text-inverse: #ffffff;
+
+  /* 背景 */
+  --bg-page: #fdfbf7;        /* 米白页面底 */
+  --bg-surface: #ffffff;     /* 卡片/表面 */
+  --bg-subtle: #f1efe9;      /* 浅米灰 */
+  --bg-green-soft: #dce6d2;  /* 浅绿底 */
+  --bg-green-faint: #f4f8f2; /* 极浅绿 */
+  --bg-pink-soft: #f5dad2;   /* 浅粉底 */
+
+  /* 辅助色 */
+  --accent-purple: #6b4c7a;  /* 紫，96 处 */
+  --accent-purple-soft: #c5b9d6;
+
+  /* 描边 / 分割线 */
+  --border: #e4e2dc;
+
+  /* 字体 */
+  --font-sans: 'Inter', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  --font-display: 'Bricolage Grotesque', 'Inter', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+
+  /* 字号（px） */
+  --text-2xs: 10px;
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 14px;
+  --text-md: 15px;
+  --text-lg: 16px;
+  --text-xl: 18px;
+  --text-2xl: 20px;
+  --text-3xl: 22px;
+  --text-4xl: 24px;
+  --text-5xl: 26px;
+
+  /* 字重 */
+  --weight-normal: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+  --weight-extrabold: 800;
+
+  /* 圆角 */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-2xl: 24px;
+  --radius-full: 999px;
+
+  /* 间距（4/8 体系） */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+}
