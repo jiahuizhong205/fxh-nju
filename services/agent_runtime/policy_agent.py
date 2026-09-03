@@ -40,6 +40,7 @@ class PolicyAgent:
                 "title": c["document_title"],
                 "trust_level": c["trust_level"],
                 "score": c["score"],
+                "source_url": c["source_url"],
             } for c in chunks],
             "warnings": [],
         }
@@ -63,7 +64,8 @@ class PolicyAgent:
         chunk_dicts = [{
             "chunk_id": e["evidence_id"], "content": e["content"],
             "document_title": e["title"], "trust_level": e["trust_level"],
-            "score": e["score"], "chunk_index": 0, "metadata": {}, "valid_from": None,
+            "score": e["score"], "chunk_index": 0, "metadata": {},
+            "valid_from": None, "source_url": e.get("source_url", ""),
         } for e in evidence]
 
         ctx = build_context(chunk_dicts)

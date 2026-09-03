@@ -10,6 +10,7 @@ from apps.api.database import get_db
 from apps.api.models import Document
 from apps.api.config import settings
 from services.rag.ingestion import ingest_document
+from services.rag.retrieval import hybrid_search, build_citations
 
 router = APIRouter()
 
@@ -118,3 +119,14 @@ async def delete_document(doc_id: UUID, db: AsyncSession = Depends(get_db)):
     doc.is_active = False
     await db.commit()
     return {"document_id": str(doc_id), "status": "deactivated"}
+
+
+@router.get("/knowledge/search")
+async def search_knowledge(q: str, top_k: int | None = None, db: AsyncSession = Depends(get_db)):
+    if not q.strip():
+        raise HTTPException(status_code=400, detail="查询不能为空")
+    try:
+        chunks = await hybrid_search(db, q, top_k)
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"检索服务暂不可用: {e}")
+    return {"query": q, "results": chunks, "citations": build_citations(chunks)}

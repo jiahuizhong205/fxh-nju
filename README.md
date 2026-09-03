@@ -19,11 +19,12 @@
 
 | 功能 | 描述 | 状态 |
 |------|------|------|
-| 辅修政策答疑 | 自然语言问答，按年份/专业检索政策条款，逐条引用原文 | ✅ MVP |
-| 辅修专业推荐 | 画像采集 → 硬门槛过滤 → 多指标评分 → 推荐报告 | 待开发 |
-| 个性化课程规划 | OR-Tools CP-SAT 排课，解决时间冲突/跨校区通勤 | 待开发 |
-| 复合方向伴学 | 双模式（在校辅修/独立自学），知识树+智能讲解 | 待开发 |
-| 职业方向探索 | 复合背景岗位匹配，简历优化建议 | 待开发 |
+| 辅修政策答疑 | 自然语言问答，按年份/专业检索政策条款，逐条引用原文 | ✅ |
+| 辅修专业推荐 | 画像采集 → 硬门槛过滤 → 多指标评分 → 推荐报告 | ✅ |
+| 个性化课程规划 | 规则引擎排课，解决时间冲突/跨校区通勤 | ✅ |
+| 复合方向伴学 | 双模式（在校辅修/独立自学），智能讲解（知识树可视化待做） | ✅ |
+| 职业方向探索 | 复合背景岗位匹配，简历优化建议 | ✅ |
+| 账号体系 | 用户名+密码注册登录，每用户独立画像 | ✅ |
 
 ## 架构概览
 
@@ -72,12 +73,44 @@ pip install -r requirements.txt
 # 3. 灌入种子数据
 PYTHONPATH=. python scripts/seed_policy_data.py
 
-# 4. 启动后端 (需要本地 LLM 如 Ollama)
+# 4. 启动后端 (默认 MOCK_LLM=true 走 mock，无需 LLM；接真实 LLM 见下文)
 uvicorn apps.api.main:app --reload --port 8000
 
 # 5. 启动前端
 cd apps/web && npm install && npm run dev
 ```
+
+## 接入真实 LLM / Embedding（可选）
+
+默认 `MOCK_LLM=true`，后端对问答走 mock 回复，**无需任何 LLM** 即可跑通确定性功能（画像、推荐、课程规划、岗位、落库、检索端点、安全策略）。要启用真实智能问答与向量检索，接入一个 OpenAI 兼容服务后改 `.env` 并重启后端：
+
+| 变量 | 含义 | 示例（硅基流动） |
+|------|------|------------------|
+| `LLM_BASE_URL` | OpenAI 兼容端点 | `https://api.siliconflow.cn/v1` |
+| `LLM_MODEL` | 对话模型 | `Qwen/Qwen2.5-7B-Instruct` |
+| `LLM_API_KEY` | API Key | `sk-...` |
+| `EMBEDDING_API_MODEL` | 向量模型 | `BAAI/bge-m3` |
+| `MOCK_LLM` | 关闭 mock | `false` |
+
+> 对话模型与向量模型是两套模型，**不可共用**。检索兜底 `services/rag/retrieval.py::_embed_via_api` 走独立的 `EMBEDDING_API_MODEL`，与 `LLM_MODEL` 分离；本地无 `bge-small-zh-v1.5` 时自动走 API。
+
+### 推荐 provider
+
+| 家 | chat | embedding | 一个 key 通吃 | 备注 |
+|----|------|-----------|--------------|------|
+| 硅基流动 SiliconFlow | ✅ | ✅ bge-m3 | ✅ | 免费额度，国内直连，最省事 |
+| 智谱 GLM | ✅ | ✅ embedding-3 | ✅ | 免费额度，`LLM_BASE_URL=https://open.bigmodel.cn/api/paas/v4` |
+| 通义千问 DashScope | ✅ | ✅ text-embedding-v3 | ✅ | OpenAI 兼容模式 |
+| DeepSeek | ✅ | ❌ 无 | ❌ | 便宜质量好，但无 embedding，需另配本地 bge |
+
+### 本地 Ollama（备选）
+
+```bash
+ollama pull qwen2.5:7b
+ollama pull nomic-embed-text
+```
+
+`.env`：`LLM_BASE_URL=http://localhost:11434/v1`、`LLM_MODEL=qwen2.5:7b`、`EMBEDDING_API_MODEL=nomic-embed-text`、`LLM_API_KEY=ollama`、`MOCK_LLM=false`。
 
 ## 项目结构
 
@@ -113,6 +146,15 @@ fuxiaohe/
 ```bash
 PYTHONPATH=. python scripts/verify_core.py
 ```
+
+## 持续集成与分支规范
+
+每次 push 到任意分支，GitHub Actions 会自动跑自测（见 `.github/workflows/ci.yml`）：
+
+- **后端**：`pip install` + `PYTHONPATH=. python scripts/verify_core.py`（无需数据库、无需 LLM）
+- **前端**：`npm ci` + `npm run build`（vue-tsc 类型检查 + vite 构建）
+
+分支规范：`dev` 为开发主分支，`main` 为受保护主干，**更新只允许从 `dev` 合并到 `main`**（PR 流程），禁止直接 push 到 `main`。
 
 ## 团队
 

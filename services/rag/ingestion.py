@@ -70,6 +70,7 @@ async def ingest_document(
     source_type: str = "policy",
     valid_from: str | None = None,
     valid_to: str | None = None,
+    source_url: str = "",
 ) -> Document:
     file_hash = hashlib.sha256(content.encode()).hexdigest()
 
@@ -84,6 +85,7 @@ async def ingest_document(
         trust_level=trust_level,
         file_hash=file_hash,
         raw_path=f"minio://raw/{title}",
+        source_url=source_url,
         valid_from=valid_from,
         valid_to=valid_to,
     )

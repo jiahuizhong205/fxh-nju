@@ -248,13 +248,13 @@ def test_recommendation_hard_filter():
 
 
 def test_recommendation_scoring():
-    """验证评分：计算机系对 CS 主修应有高空缺效率分。"""
+    """验证评分：总分有效，且课程重合度维度（依赖本院培养方案，暂缺）不参与评分。"""
     from services.planning.recommendation_engine import score_program, PROGRAMS
 
     profile = {"major": "计算机科学与技术", "interests": ["AI", "后端"], "career_goals": ""}
     cs = next(p for p in PROGRAMS if p["name"] == "计算机科学与技术")
     result = score_program(cs, profile)
-    assert result.scores["overlap_efficiency"] >= 0.5
+    assert "overlap_efficiency" not in result.scores, "课程重合度数据暂缺，不应出现在评分里"
     assert result.total > 0
     print("  PASS test_recommendation_scoring")
 

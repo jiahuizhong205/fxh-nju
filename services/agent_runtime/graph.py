@@ -14,6 +14,7 @@ from services.agent_runtime.career_agent import CareerAgent
 
 
 async def guard_input(state: AssistantState) -> dict:
+    # 注入检测已前移到 chat.py 入口（detect_injection），此处只做空输入兜底
     warnings = []
     msg = state.get("messages", [])
     if not msg:

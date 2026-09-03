@@ -1,22 +1,39 @@
 """学生画像 API——CRUD 用户画像。"""
 
-from uuid import UUID
-
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.api.database import get_db
-from apps.api.models import StudentProfile
+from apps.api.models import StudentProfile, User, utcnow
+from apps.api.routes.auth import get_current_user
 
 router = APIRouter()
 
 
+class ProfileUpdate(BaseModel):
+    major: str
+    grade: str
+    campus: str = ""
+    interests: list[str] = Field(default_factory=list)
+    strengths: list[str] = Field(default_factory=list)
+    career_goals: str = ""
+    math_willingness: bool = False
+    campus_flexibility: bool = False
+    credit_budget: int = 0
+    certificate_goal: str = ""
+    schedule_preferences: dict = Field(default_factory=dict)
+
+
 @router.get("/profile")
-async def get_profile(db: AsyncSession = Depends(get_db)):
-    """获取当前画像（MVP 单用户，取最新记录）。"""
+async def get_profile(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """获取当前登录用户的画像。"""
     result = await db.execute(
-        select(StudentProfile).order_by(StudentProfile.updated_at.desc()).limit(1)
+        select(StudentProfile)
+        .where(StudentProfile.user_id == user.id)
+        .order_by(StudentProfile.updated_at.desc())
+        .limit(1)
     )
     profile = result.scalar_one_or_none()
     if not profile:
@@ -25,42 +42,24 @@ async def get_profile(db: AsyncSession = Depends(get_db)):
 
 
 @router.put("/profile")
-async def upsert_profile(
-    major: str,
-    grade: str,
-    campus: str = "",
-    career_goals: str = "",
-    math_willingness: bool = False,
-    campus_flexibility: bool = False,
-    credit_budget: int = 0,
-    certificate_goal: str = "",
-    db: AsyncSession = Depends(get_db),
-):
-    """创建或更新画像。"""
+async def upsert_profile(payload: ProfileUpdate, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """创建或更新当前登录用户的画像。"""
     result = await db.execute(
-        select(StudentProfile).order_by(StudentProfile.updated_at.desc()).limit(1)
+        select(StudentProfile)
+        .where(StudentProfile.user_id == user.id)
+        .order_by(StudentProfile.updated_at.desc())
+        .limit(1)
     )
     profile = result.scalar_one_or_none()
 
+    data = payload.model_dump()
     if profile:
-        profile.major = major
-        profile.grade = grade
-        profile.campus = campus
-        profile.career_goals = career_goals
-        profile.math_willingness = math_willingness
-        profile.campus_flexibility = campus_flexibility
-        profile.credit_budget = credit_budget
-        profile.certificate_goal = certificate_goal
+        for k, v in data.items():
+            setattr(profile, k, v)
         profile.version += 1
+        profile.updated_at = utcnow()
     else:
-        profile = StudentProfile(
-            major=major, grade=grade, campus=campus,
-            career_goals=career_goals,
-            math_willingness=math_willingness,
-            campus_flexibility=campus_flexibility,
-            credit_budget=credit_budget,
-            certificate_goal=certificate_goal,
-        )
+        profile = StudentProfile(**data, user_id=user.id)
         db.add(profile)
 
     await db.commit()
@@ -69,10 +68,13 @@ async def upsert_profile(
 
 
 @router.delete("/profile")
-async def delete_profile(db: AsyncSession = Depends(get_db)):
-    """清空画像。MVP 单用户。"""
+async def delete_profile(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """清空当前登录用户的画像。"""
     result = await db.execute(
-        select(StudentProfile).order_by(StudentProfile.updated_at.desc()).limit(1)
+        select(StudentProfile)
+        .where(StudentProfile.user_id == user.id)
+        .order_by(StudentProfile.updated_at.desc())
+        .limit(1)
     )
     profile = result.scalar_one_or_none()
     if profile:
@@ -88,11 +90,14 @@ def _serialize(p: StudentProfile) -> dict:
         "major": p.major,
         "grade": p.grade,
         "campus": p.campus,
+        "interests": p.interests or [],
+        "strengths": p.strengths or [],
         "career_goals": p.career_goals,
         "math_willingness": p.math_willingness,
         "campus_flexibility": p.campus_flexibility,
         "credit_budget": p.credit_budget,
         "certificate_goal": p.certificate_goal,
+        "schedule_preferences": p.schedule_preferences or {},
         "version": p.version,
-        "updated_at": p.updated_at.isoformat(),
+        "updated_at": p.updated_at.isoformat() if p.updated_at else None,
     }

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { searchKnowledge, type SearchResult } from '../api/client'
 
 interface Document {
   id: string; title: string; trust_level: string; source_type: string
@@ -76,6 +77,29 @@ function toggleFilter(val: boolean | null) {
   loadDocs()
 }
 
+// search
+const searchQuery = ref('')
+const searchResults = ref<SearchResult[]>([])
+const searchMsg = ref('')
+const searching = ref(false)
+
+async function handleSearch() {
+  const q = searchQuery.value.trim()
+  if (!q) return
+  searching.value = true
+  searchMsg.value = ''
+  try {
+    const data = await searchKnowledge(q)
+    searchResults.value = data.results
+    searchMsg.value = `检索到 ${data.results.length} 条结果`
+  } catch (e: any) {
+    searchResults.value = []
+    searchMsg.value = `检索失败: ${e.message}`
+  } finally {
+    searching.value = false
+  }
+}
+
 onMounted(loadDocs)
 </script>
 
@@ -111,8 +135,26 @@ onMounted(loadDocs)
     </div>
 
     <div class="kb-main">
+      <!-- 检索 -->
+      <h3>知识检索</h3>
+      <div class="search-box">
+        <input v-model="searchQuery" placeholder="输入问题，检索知识库（如：辅修学分要求）" @keyup.enter="handleSearch" />
+        <button @click="handleSearch" :disabled="searching">{{ searching ? '检索中...' : '检索' }}</button>
+      </div>
+      <p v-if="searchMsg" class="msg">{{ searchMsg }}</p>
+      <div v-if="searchResults.length" class="search-results">
+        <div v-for="r in searchResults" :key="r.chunk_id" class="result-item">
+          <div class="result-head">
+            <span class="result-title">{{ r.document_title }}</span>
+            <span class="badge" :class="'t' + r.trust_level">{{ r.trust_level }}</span>
+            <span class="result-score">score {{ r.score.toFixed(2) }}</span>
+          </div>
+          <p class="result-excerpt">{{ r.content.slice(0, 200) }}{{ r.content.length > 200 ? '...' : '' }}</p>
+        </div>
+      </div>
+
       <!-- 文档列表 -->
-      <h3>文档列表 ({{ docs.length }})</h3>
+      <h3 style="margin-top: 24px">文档列表 ({{ docs.length }})</h3>
       <div v-if="loading" class="loading">加载中...</div>
       <table v-else>
         <thead>
@@ -145,8 +187,10 @@ onMounted(loadDocs)
           </select>
           <select v-model="uploadType">
             <option value="policy">政策</option>
-            <option value="catalog">培养方案</option>
-            <option value="faq">FAQ</option>
+            <option value="regulation">法规</option>
+            <option value="course_catalog">培养方案</option>
+            <option value="job_posting">招聘信息</option>
+            <option value="other">其他</option>
           </select>
           <button @click="handleUpload">上传</button>
         </div>
@@ -171,7 +215,7 @@ onMounted(loadDocs)
   flex: 1; padding: 4px 8px; font-size: 0.78rem; border: 1px solid #d4d4d8;
   background: #fff; border-radius: 4px; cursor: pointer;
 }
-.filter-btns button.active { background: #7c3aed; color: #fff; border-color: #7c3aed; }
+.filter-btns button.active { background: #5a7a6b; color: #fff; border-color: #5a7a6b; }
 select { padding: 6px 8px; border: 1px solid #d4d4d8; border-radius: 6px; font-size: 0.85rem; width: 100%; }
 
 .version-section { border-top: 1px solid #e5e7eb; padding-top: 12px; }
@@ -180,7 +224,7 @@ select { padding: 6px 8px; border: 1px solid #d4d4d8; border-radius: 6px; font-s
   font-size: 0.85rem; margin-bottom: 6px;
 }
 .version-section button {
-  width: 100%; padding: 6px; background: #7c3aed; color: #fff; border: none;
+  width: 100%; padding: 6px; background: #5a7a6b; color: #fff; border: none;
   border-radius: 6px; cursor: pointer; font-size: 0.85rem;
 }
 
@@ -214,9 +258,24 @@ th { color: #6b7280; font-weight: 500; font-size: 0.8rem; }
 .upload-row { display: flex; gap: 8px; align-items: center; }
 .upload-row select { width: auto; flex: 1; }
 .upload-row button {
-  padding: 8px 20px; background: #7c3aed; color: #fff; border: none;
+  padding: 8px 20px; background: #5a7a6b; color: #fff; border: none;
   border-radius: 8px; cursor: pointer;
 }
 .msg { font-size: 0.85rem; color: #6b7280; }
 .loading { padding: 20px; color: #9ca3af; }
+
+.search-box { display: flex; gap: 8px; margin-bottom: 8px; max-width: 600px; }
+.search-box input {
+  flex: 1; padding: 8px 12px; border: 1px solid #d4d4d8; border-radius: 8px; font-size: 0.9rem;
+}
+.search-box button {
+  padding: 8px 20px; background: #5a7a6b; color: #fff; border: none; border-radius: 8px; cursor: pointer;
+}
+.search-box button:disabled { opacity: 0.6; cursor: not-allowed; }
+.search-results { margin-top: 12px; display: flex; flex-direction: column; gap: 10px; max-width: 700px; }
+.result-item { border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px 12px; }
+.result-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.result-title { font-weight: 600; font-size: 0.9rem; }
+.result-score { font-size: 0.75rem; color: #6b7280; }
+.result-excerpt { font-size: 0.85rem; color: #374151; margin: 0; line-height: 1.5; }
 </style>

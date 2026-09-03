@@ -1,177 +1,152 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
+import { fetchProfile, logout, type StudentProfile } from '../api/client'
+import { useAuthStore } from '../stores/auth'
 
-const profile = ref<any>(null)
-const msg = ref('')
+const router = useRouter()
+const auth = useAuthStore()
+const profile = ref<StudentProfile | null>(null)
+const loading = ref(true)
 
-// form state
-const major = ref('')
-const grade = ref('大一')
-const campus = ref('仙林校区')
-const careerGoals = ref('')
-const mathWillingness = ref(false)
-const campusFlexibility = ref(false)
-const creditBudget = ref(50)
-const certificateGoal = ref('')
-
-const grades = ['大一', '大二', '大三', '大四']
-const campuses = ['仙林校区', '鼓楼校区', '苏州校区']
-const certGoals = [
-  { value: 'degree', label: '辅修学士学位' },
-  { value: 'cert', label: '辅修结业证明' },
-  { value: 'none', label: '暂无证书目标' },
-]
+const certLabel: Record<string, string> = { degree: '辅修学位', cert: '结业证书', none: '仅旁听' }
 
 onMounted(async () => {
-  const res = await fetch('/api/v1/profile')
-  const data = await res.json()
-  if (data.profile) {
-    profile.value = data.profile
-    major.value = data.profile.major
-    grade.value = data.profile.grade
-    campus.value = data.profile.campus || ''
-    careerGoals.value = data.profile.career_goals
-    mathWillingness.value = data.profile.math_willingness
-    campusFlexibility.value = data.profile.campus_flexibility
-    creditBudget.value = data.profile.credit_budget || 50
-    certificateGoal.value = data.profile.certificate_goal
+  try {
+    profile.value = await fetchProfile()
+  } catch {
+    profile.value = null
+  } finally {
+    loading.value = false
   }
 })
 
-async function save() {
-  const params = new URLSearchParams()
-  params.set('major', major.value)
-  params.set('grade', grade.value)
-  params.set('campus', campus.value)
-  params.set('career_goals', careerGoals.value)
-  params.set('math_willingness', String(mathWillingness.value))
-  params.set('campus_flexibility', String(campusFlexibility.value))
-  params.set('credit_budget', String(creditBudget.value))
-  params.set('certificate_goal', certificateGoal.value)
-
-  const res = await fetch('/api/v1/profile?' + params, { method: 'PUT' })
-  const data = await res.json()
-  profile.value = data.profile
-  msg.value = '画像已保存！'
-  setTimeout(() => msg.value = '', 3000)
+async function handleLogout() {
+  try { await logout() } catch { /* token 已失效也照常退出 */ }
+  auth.clearAuth()
+  router.push('/login')
 }
+
+const menu = [
+  { label: '我的学习进度', to: '/settings/learning-progress', icon: '👀', desc: '谁可以逛我的花园' },
+  { label: '修改密码', to: '/settings/change-password', icon: '🔐', desc: '换一把花园钥匙' },
+  { label: '通知设置', to: '/settings/notification', icon: '🌸', desc: '风铃要响几声？' },
+  { label: '数据同步', to: '/settings/data-sync', icon: '☁️', desc: '种子备份云' },
+  { label: '设置', to: '/settings', icon: '⚙️', desc: '花园工具箱' },
+]
 </script>
 
 <template>
-  <div class="profile-page">
-    <div class="profile-card">
-      <h2>学生画像</h2>
-      <p class="desc">填写基本信息，福小禾将为你精准推荐辅修方向。</p>
+  <div class="profile">
+    <section class="user-card">
+      <img class="avatar" src="/illustrations/avatar-wreath.png" alt="头像" />
+      <div class="user-info">
+        <h2>{{ auth.user?.nickname || auth.user?.username }} <span class="star">⭐</span></h2>
+        <p class="account">@{{ auth.user?.username }}</p>
+        <template v-if="loading">
+          <p class="account">加载中…</p>
+        </template>
+        <template v-else-if="profile">
+          <p>{{ profile.major }} · {{ profile.grade }} · {{ profile.campus }}</p>
+        </template>
+        <router-link v-else to="/edit-profile" class="empty-cta">完善园丁卡片，解锁推荐 →</router-link>
+      </div>
+      <router-link to="/edit-profile" class="edit-btn" aria-label="编辑个人资料">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>
+        </svg>
+      </router-link>
+    </section>
 
-      <div class="form-grid">
-        <div class="field">
-          <label>主修专业 <span class="req">*</span></label>
-          <input v-model="major" placeholder="如：汉语言文学、计算机科学与技术" />
+    <section v-if="profile" class="garden">
+      <div class="garden-title">我的画像 🌳</div>
+      <div class="garden-grid">
+        <div class="garden-item">
+          <span class="k">兴趣方向</span>
+          <span class="v">{{ profile.interests.length ? profile.interests.join('、') : '未填写' }}</span>
         </div>
-        <div class="field">
-          <label>所在年级 <span class="req">*</span></label>
-          <select v-model="grade">
-            <option v-for="g in grades" :key="g" :value="g">{{ g }}</option>
-          </select>
+        <div class="garden-item">
+          <span class="k">擅长技能</span>
+          <span class="v">{{ profile.strengths.length ? profile.strengths.join('、') : '未填写' }}</span>
         </div>
-        <div class="field">
-          <label>就读校区</label>
-          <select v-model="campus">
-            <option v-for="c in campuses" :key="c" :value="c">{{ c }}</option>
-          </select>
+        <div class="garden-item">
+          <span class="k">职业目标</span>
+          <span class="v">{{ profile.career_goals || '未填写' }}</span>
         </div>
-        <div class="field">
-          <label>证书目标</label>
-          <select v-model="certificateGoal">
-            <option value="">请选择</option>
-            <option v-for="cg in certGoals" :key="cg.value" :value="cg.value">{{ cg.label }}</option>
-          </select>
-        </div>
-        <div class="field">
-          <label>可接受学分上限</label>
-          <input v-model.number="creditBudget" type="number" min="0" max="120" />
-        </div>
-        <div class="field full">
-          <label>职业目标</label>
-          <input v-model="careerGoals" placeholder="如：希望从事金融或传媒行业" />
-        </div>
-        <div class="field checkbox-group">
-          <label>
-            <input type="checkbox" v-model="mathWillingness" />
-            愿意修读高等数学
-          </label>
-          <span class="hint">（理科辅修通常要求高数，不修最高只能拿结业证明）</span>
-        </div>
-        <div class="field checkbox-group">
-          <label>
-            <input type="checkbox" v-model="campusFlexibility" />
-            接受跨校区通勤
-          </label>
-          <span class="hint">（鼓楼-仙林约40-60分钟公交）</span>
+        <div class="garden-item">
+          <span class="k">证书目标</span>
+          <span class="v">{{ certLabel[profile.certificate_goal] || '未填写' }}</span>
         </div>
       </div>
+    </section>
 
-      <button class="btn-save" @click="save" :disabled="!major || !grade">
-        保存画像
+    <section class="menu">
+      <router-link v-for="m in menu" :key="m.to" :to="m.to" class="entry">
+        <span class="entry-emoji">{{ m.icon }}</span>
+        <span class="entry-main">
+          <span class="entry-label">{{ m.label }}</span>
+          <span class="entry-desc">{{ m.desc }}</span>
+        </span>
+        <svg class="chevron" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="m9 18 6-6-6-6"/>
+        </svg>
+      </router-link>
+      <button class="entry entry-logout" @click="handleLogout">
+        <span class="entry-emoji">🍂</span>
+        <span class="entry-main">
+          <span class="entry-label">退出花园</span>
+        </span>
       </button>
-      <p v-if="msg" class="toast">{{ msg }}</p>
-
-      <div v-if="profile" class="current-profile">
-        <h4>当前画像</h4>
-        <ul>
-          <li>专业：{{ profile.major }}</li>
-          <li>年级：{{ profile.grade }} · {{ profile.campus || '未填' }}</li>
-          <li>证书目标：{{ profile.certificate_goal || '未填' }}</li>
-          <li>数学：{{ profile.math_willingness ? '接受' : '不接受' }}</li>
-          <li>跨校区：{{ profile.campus_flexibility ? '接受' : '不接受' }}</li>
-          <li>学分预算：{{ profile.credit_budget || '不限' }}</li>
-        </ul>
-      </div>
-    </div>
+    </section>
   </div>
 </template>
 
 <style scoped>
-.profile-page {
-  flex: 1; display: flex; justify-content: center; padding: 32px 20px;
-  overflow-y: auto;
+.profile { padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-5); }
+
+.user-card {
+  display: flex; align-items: center; gap: var(--space-4);
+  background: var(--bg-surface); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); padding: var(--space-5) var(--space-4);
 }
-.profile-card {
-  width: 100%; max-width: 560px; background: #fff;
-  border-radius: 12px; padding: 28px; box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+.avatar {
+  width: 72px; height: 72px; border-radius: var(--radius-full);
+  object-fit: cover; flex-shrink: 0;
 }
-h2 { font-size: 1.3rem; margin-bottom: 4px; }
-.desc { color: #6b7280; font-size: 0.9rem; margin-bottom: 20px; }
-
-.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-.field.full { grid-column: span 2; }
-.field.checkbox-group { grid-column: span 2; }
-
-.field label { font-size: 0.85rem; font-weight: 500; display: block; margin-bottom: 4px; color: #374151; }
-.req { color: #ef4444; }
-.field input, .field select {
-  width: 100%; padding: 8px 12px; border: 1px solid #d4d4d8; border-radius: 8px;
-  font-size: 0.9rem; font-family: inherit;
+.user-info { flex: 1; }
+.user-info .account { margin: 0; font-size: var(--text-xs); color: var(--text-muted); }
+.user-info h2 { font-size: var(--text-xl); font-weight: var(--weight-bold); color: var(--text-primary); }
+.star { font-size: var(--text-base); }
+.user-info p { margin-top: var(--space-1); font-size: var(--text-sm); color: var(--text-muted); }
+.empty-cta { display: inline-block; margin-top: var(--space-1); font-size: var(--text-sm); color: var(--brand-strong); font-weight: var(--weight-medium); text-decoration: none; }
+.edit-btn {
+  width: 36px; height: 36px; border-radius: var(--radius-full);
+  background: var(--bg-green-faint); color: var(--brand-strong);
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  text-decoration: none;
 }
-.field input:focus, .field select:focus { border-color: #7c3aed; outline: none; }
 
-.checkbox-group label { font-size: 0.9rem; cursor: pointer; display: flex; align-items: center; gap: 6px; }
-.checkbox-group input[type="checkbox"] { width: auto; }
-.hint { font-size: 0.78rem; color: #9ca3af; display: block; margin-top: 2px; margin-left: 22px; }
+.garden { background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: var(--space-4); }
+.garden-title { font-size: var(--text-base); font-weight: var(--weight-semibold); color: var(--text-primary); margin-bottom: var(--space-3); }
+.garden-grid { display: flex; flex-direction: column; gap: var(--space-4); }
+.garden-item { display: flex; flex-direction: column; gap: 4px; }
+.garden-item .k { font-size: var(--text-xs); color: var(--text-muted); }
+.garden-item .v { font-size: var(--text-sm); color: var(--text-primary); font-weight: var(--weight-medium); line-height: 1.5; }
 
-.btn-save {
-  margin-top: 20px; width: 100%; padding: 10px; background: #7c3aed;
-  color: #fff; border: none; border-radius: 8px; font-size: 1rem;
-  cursor: pointer; font-weight: 500;
+.menu { background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; }
+.entry {
+  display: flex; align-items: center; gap: var(--space-3);
+  width: 100%; padding: var(--space-4);
+  text-decoration: none; color: var(--text-primary);
+  border: none; border-bottom: 1px solid var(--bg-subtle);
+  background: none; font-family: inherit; font-size: var(--text-base);
+  cursor: pointer; text-align: left;
 }
-.btn-save:disabled { background: #c4b5fd; cursor: not-allowed; }
-
-.toast { margin-top: 10px; text-align: center; color: #16a34a; font-size: 0.9rem; }
-
-.current-profile {
-  margin-top: 24px; padding-top: 20px; border-top: 1px solid #e5e7eb;
-}
-.current-profile h4 { font-size: 0.95rem; margin-bottom: 8px; color: #6b7280; }
-.current-profile ul { list-style: none; font-size: 0.88rem; color: #374151; }
-.current-profile li { padding: 3px 0; }
+.entry:last-child { border-bottom: none; }
+.entry-emoji { font-size: var(--text-lg); flex-shrink: 0; line-height: 1; }
+.entry-main { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.entry-label { font-size: var(--text-base); font-weight: var(--weight-medium); }
+.entry-desc { font-size: var(--text-xs); color: var(--text-muted); }
+.chevron { color: var(--text-muted); flex-shrink: 0; }
+.entry-logout { color: var(--accent-purple); }
 </style>

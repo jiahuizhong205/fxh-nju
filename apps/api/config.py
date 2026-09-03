@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://fuxiaohe:fuxiaohe_dev@localhost:5432/fuxiaohe"
     redis_url: str = "redis://localhost:6379/0"
     embedding_model: str = "BAAI/bge-small-zh-v1.5"
+    embedding_api_model: str = "BAAI/bge-m3"
     llm_base_url: str = "http://localhost:11434/v1"
     llm_model: str = "qwen2.5:7b"
     llm_api_key: str = "ollama"
@@ -17,6 +18,7 @@ class Settings(BaseSettings):
     rate_limit_window_seconds: int = 60
     max_upload_bytes: int = 10 * 1024 * 1024  # 10 MB
     api_key: str = ""
+    mock_llm: bool = False
 
 
 settings = Settings()

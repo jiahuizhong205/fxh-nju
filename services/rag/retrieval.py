@@ -26,15 +26,28 @@ def _init_local_model():
 def embed_text(text: str) -> list[float]:
     _init_local_model()
     if _use_api:
-        return _embed_via_api(text)
+        try:
+            return _embed_via_api(text)
+        except Exception:
+            return _placeholder_embedding(text)
     return _embedding_model.encode(text, normalize_embeddings=True).tolist()
+
+
+def _placeholder_embedding(text: str) -> list[float]:
+    """无 embedding 模型时的占位向量（文本 hash 确定性展开，无语义）。
+
+    ponytail: 上线接真实 embedding API 后重新 seed，替换为真向量。
+    """
+    import hashlib
+    h = hashlib.md5(text.encode("utf-8")).digest()
+    return [(b / 127.5 - 1.0) for b in (h * 24)]  # 16 * 24 = 384 维
 
 
 def _embed_via_api(text: str) -> list[float]:
     """OpenAI 兼容 embedding API 兜底。"""
     resp = httpx.post(
         f"{settings.llm_base_url}/embeddings",
-        json={"model": settings.llm_model, "input": text},
+        json={"model": settings.embedding_api_model, "input": text},
         headers={"Authorization": f"Bearer {settings.llm_api_key}"},
         timeout=15,
     )
@@ -56,9 +69,9 @@ async def hybrid_search(
     sql = text("""
         WITH vector_matches AS (
             SELECT id, document_id, chunk_index, content, metadata_,
-                   1.0 - (embedding <=> :embedding) AS similarity
+                   1.0 - (embedding <=> cast(:embedding as vector)) AS similarity
             FROM document_chunks
-            ORDER BY embedding <=> :embedding
+            ORDER BY embedding <=> cast(:embedding as vector)
             LIMIT :k2
         ),
         text_matches AS (
@@ -69,7 +82,7 @@ async def hybrid_search(
             LIMIT :k2
         )
         SELECT c.id, c.content, c.chunk_index, c.metadata_,
-               d.title, d.trust_level, d.valid_from,
+               d.title, d.trust_level, d.valid_from, d.source_url,
                COALESCE(v.similarity, 0) + COALESCE(t.similarity, 0) AS score
         FROM document_chunks c
         JOIN documents d ON c.document_id = d.id
@@ -82,7 +95,7 @@ async def hybrid_search(
         LIMIT :k
     """)
     result = await db.execute(sql, {
-        "embedding": query_vector,
+        "embedding": str(query_vector),
         "query": query,
         "k": k, "k2": k * 2,
         "trust_levels": list(trust_levels),
@@ -101,6 +114,7 @@ async def hybrid_search(
             "document_title": row.title,
             "trust_level": row.trust_level,
             "valid_from": row.valid_from.isoformat() if row.valid_from else None,
+            "source_url": row.source_url or "",
             "score": float(row.score),
         })
     return docs
@@ -114,6 +128,7 @@ def build_citations(chunks: list[dict]) -> list[dict]:
         "excerpt": c["content"][:200] + ("..." if len(c["content"]) > 200 else ""),
         "trust_level": c["trust_level"],
         "valid_from": c["valid_from"],
+        "source_url": c.get("source_url", ""),
     } for c in chunks]
 
 

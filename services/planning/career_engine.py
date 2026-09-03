@@ -57,10 +57,11 @@ SAMPLE_JOBS = [
 ]
 
 
-def match_jobs(major: str, minor: str | None = None) -> list[dict]:
+def match_jobs(major: str, minor: str | None = None, jobs: list[dict] | None = None) -> list[dict]:
     """按主修+辅修专业匹配岗位，计算技能覆盖度。"""
+    jobs = jobs or SAMPLE_JOBS
     results = []
-    for job in SAMPLE_JOBS:
+    for job in jobs:
         score = 0
         reasons = []
 

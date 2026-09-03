@@ -1,0 +1,292 @@
+INFO:     Started server process [19340]
+INFO:     Waiting for application startup.
+2026-08-27 12:31:47,088 [fuxiaohe] INFO fuxiaohe starting...
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+2026-08-27 12:31:47,740 [fuxiaohe] INFO request
+INFO:     127.0.0.1:52251 - "GET /api/v1/auth/me HTTP/1.1" 401 Unauthorized
+2026-08-27 12:32:05,221 [fuxiaohe] INFO request
+INFO:     127.0.0.1:56139 - "GET /api/v1/profile HTTP/1.1" 200 OK
+2026-08-27 12:32:05,297 [fuxiaohe] INFO request
+INFO:     127.0.0.1:60222 - "POST /api/v1/recommend HTTP/1.1" 200 OK
+2026-08-27 12:32:05,492 [fuxiaohe] INFO request
+INFO:     127.0.0.1:58524 - "GET /api/v1/profile HTTP/1.1" 200 OK
+2026-08-27 12:32:05,526 [fuxiaohe] INFO request
+INFO:     127.0.0.1:58525 - "POST /api/v1/recommend HTTP/1.1" 200 OK
+2026-08-27 12:32:07,791 [fuxiaohe] INFO request
+INFO:     127.0.0.1:56500 - "GET /api/v1/jobs HTTP/1.1" 200 OK
+2026-08-27 12:32:08,734 [fuxiaohe] INFO request
+INFO:     127.0.0.1:56503 - "GET /api/v1/profile HTTP/1.1" 200 OK
+2026-08-27 12:32:08,749 [fuxiaohe] INFO request
+INFO:     127.0.0.1:56504 - "POST /api/v1/recommend HTTP/1.1" 200 OK
+2026-08-27 12:32:11,647 [fuxiaohe] INFO request
+INFO:     127.0.0.1:56512 - "GET /api/v1/profile HTTP/1.1" 200 OK
+2026-08-27 12:32:13,788 [fuxiaohe] INFO request
+INFO:     127.0.0.1:59152 - "POST /api/v1/auth/logout HTTP/1.1" 200 OK
+2026-08-27 12:32:15,677 [fuxiaohe] INFO request
+INFO:     127.0.0.1:62876 - "POST /api/v1/auth/login HTTP/1.1" 200 OK
+2026-08-27 12:32:15,711 [fuxiaohe] INFO request
+INFO:     127.0.0.1:62878 - "GET /api/v1/profile HTTP/1.1" 200 OK
+2026-08-27 12:32:16,032 [fuxiaohe] INFO request
+INFO:     127.0.0.1:56273 - "POST /api/v1/recommend HTTP/1.1" 200 OK
+2026-08-27 12:42:15,599 [fuxiaohe] INFO request
+INFO:     127.0.0.1:62182 - "GET /api/v1/conversations HTTP/1.1" 200 OK
+2026-08-27 12:42:16,725 [fuxiaohe] INFO request
+INFO:     127.0.0.1:54990 - "GET /api/v1/profile HTTP/1.1" 200 OK
+2026-08-27 12:42:16,743 [fuxiaohe] INFO request
+INFO:     127.0.0.1:54991 - "POST /api/v1/recommend HTTP/1.1" 200 OK
+2026-08-27 12:42:17,409 [fuxiaohe] INFO request
+INFO:     127.0.0.1:54993 - "GET /api/v1/profile HTTP/1.1" 200 OK
+2026-08-27 12:42:20,479 [fuxiaohe] INFO request
+INFO:     127.0.0.1:57818 - "GET /api/v1/profile HTTP/1.1" 200 OK
+2026-08-27 12:42:20,745 [fuxiaohe] INFO request
+INFO:     127.0.0.1:58553 - "POST /api/v1/recommend HTTP/1.1" 200 OK
+2026-08-27 12:42:21,139 [fuxiaohe] INFO request
+INFO:     127.0.0.1:54245 - "GET /api/v1/programs HTTP/1.1" 200 OK
+2026-08-27 12:42:21,466 [fuxiaohe] INFO request
+INFO:     127.0.0.1:58656 - "GET /api/v1/programs/plan?program=%E6%96%B0%E9%97%BB%E5%AD%A6 HTTP/1.1" 200 OK
+2026-08-27 12:42:22,833 [fuxiaohe] INFO request
+INFO:     127.0.0.1:61456 - "GET /api/v1/profile HTTP/1.1" 200 OK
+2026-08-27 12:42:23,153 [fuxiaohe] INFO request
+INFO:     127.0.0.1:63058 - "POST /api/v1/recommend HTTP/1.1" 200 OK
+2026-08-27 12:42:27,120 [langchain_openai.chat_models._client_utils] INFO langchain-openai detected system proxy configuration and no explicit `http_socket_options` / `http_client` / `http_async_client` / `openai_proxy`; skipping the custom `httpx` transport so httpx's env-proxy auto-detection applies. Pass `http_socket_options=[...]` to opt back into kernel-level TCP keepalive tuning on top of the env proxy.
+2026-08-27 12:42:31,821 [fuxiaohe] INFO request
+INFO:     127.0.0.1:51493 - "POST /api/v1/chat HTTP/1.1" 200 OK
+2026-08-27 12:42:35,257 [fuxiaohe] INFO request
+INFO:     127.0.0.1:51524 - "GET /api/v1/programs HTTP/1.1" 200 OK
+2026-08-27 12:42:35,583 [fuxiaohe] INFO request
+INFO:     127.0.0.1:61911 - "GET /api/v1/programs/plan?program=%E6%96%B0%E9%97%BB%E5%AD%A6 HTTP/1.1" 200 OK
+2026-08-27 12:42:36,783 [fuxiaohe] INFO request
+INFO:     127.0.0.1:58246 - "GET /api/v1/jobs HTTP/1.1" 200 OK
+2026-08-27 12:42:38,997 [fuxiaohe] INFO request
+INFO:     127.0.0.1:63837 - "GET /api/v1/jobs/job001 HTTP/1.1" 200 OK
+2026-08-27 12:42:40,979 [fuxiaohe] INFO request
+INFO:     127.0.0.1:54839 - "GET /api/v1/jobs HTTP/1.1" 200 OK
+2026-08-27 12:42:44,185 [fuxiaohe] INFO request
+INFO:     127.0.0.1:62708 - "GET /api/v1/profile HTTP/1.1" 200 OK
+2026-08-27 12:42:47,236 [fuxiaohe] INFO request
+INFO:     127.0.0.1:55083 - "GET /api/v1/profile HTTP/1.1" 200 OK
+2026-08-27 12:42:47,253 [fuxiaohe] INFO request
+INFO:     127.0.0.1:55084 - "POST /api/v1/recommend HTTP/1.1" 200 OK
+2026-08-27 12:42:49,129 [fuxiaohe] INFO request
+INFO:     127.0.0.1:49921 - "GET /api/v1/profile HTTP/1.1" 200 OK
+2026-08-27 12:42:50,827 [fuxiaohe] INFO request
+INFO:     127.0.0.1:58038 - "POST /api/v1/auth/logout HTTP/1.1" 200 OK
+2026-08-27 12:43:14,028 [fuxiaohe] INFO request
+INFO:     127.0.0.1:62334 - "POST /api/v1/auth/login HTTP/1.1" 200 OK
+2026-08-27 12:43:14,150 [fuxiaohe] INFO request
+INFO:     127.0.0.1:56698 - "GET /api/v1/profile HTTP/1.1" 200 OK
+2026-08-27 12:43:14,368 [fuxiaohe] INFO request
+INFO:     127.0.0.1:65491 - "POST /api/v1/recommend HTTP/1.1" 200 OK
+2026-08-27 12:43:18,856 [fuxiaohe] INFO request
+INFO:     127.0.0.1:53662 - "GET /api/v1/conversations HTTP/1.1" 200 OK
+2026-08-27 12:43:21,721 [fuxiaohe] INFO request
+INFO:     127.0.0.1:64170 - "POST /api/v1/chat HTTP/1.1" 200 OK
+2026-08-27 12:43:21,931 [fuxiaohe] INFO request
+INFO:     127.0.0.1:64391 - "GET /api/v1/conversations HTTP/1.1" 200 OK
+2026-08-27 12:43:32,093 [fuxiaohe] INFO request
+INFO:     127.0.0.1:61837 - "GET /api/v1/profile HTTP/1.1" 200 OK
+2026-08-27 12:43:32,334 [fuxiaohe] INFO request
+INFO:     127.0.0.1:53339 - "POST /api/v1/recommend HTTP/1.1" 200 OK
+2026-08-27 12:43:33,075 [fuxiaohe] INFO request
+INFO:     127.0.0.1:56577 - "GET /api/v1/profile HTTP/1.1" 200 OK
+2026-08-27 12:43:34,276 [fuxiaohe] INFO request
+INFO:     127.0.0.1:60164 - "POST /api/v1/recommend HTTP/1.1" 200 OK
+2026-08-27 12:43:37,844 [fuxiaohe] INFO request
+INFO:     127.0.0.1:64121 - "GET /api/v1/profile HTTP/1.1" 200 OK
+2026-08-27 12:43:38,154 [fuxiaohe] INFO request
+INFO:     127.0.0.1:50141 - "POST /api/v1/recommend HTTP/1.1" 200 OK
+2026-08-27 12:43:38,871 [fuxiaohe] INFO request
+INFO:     127.0.0.1:57092 - "GET /api/v1/programs HTTP/1.1" 200 OK
+2026-08-27 12:43:39,208 [fuxiaohe] INFO request
+INFO:     127.0.0.1:63607 - "GET /api/v1/programs/plan?program=%E6%96%B0%E9%97%BB%E5%AD%A6 HTTP/1.1" 200 OK
+2026-08-27 12:43:49,299 [fuxiaohe] INFO request
+INFO:     127.0.0.1:51874 - "GET /api/v1/programs/plan?program=%E6%B3%95%E5%AD%A6 HTTP/1.1" 200 OK
+2026-08-27 12:43:51,782 [fuxiaohe] INFO request
+INFO:     127.0.0.1:52754 - "GET /api/v1/profile HTTP/1.1" 200 OK
+2026-08-27 12:43:52,043 [fuxiaohe] INFO request
+INFO:     127.0.0.1:56054 - "POST /api/v1/recommend HTTP/1.1" 200 OK
+2026-08-27 12:43:52,980 [fuxiaohe] INFO request
+INFO:     127.0.0.1:64747 - "GET /api/v1/programs HTTP/1.1" 200 OK
+2026-08-27 12:43:53,311 [fuxiaohe] INFO request
+INFO:     127.0.0.1:49213 - "GET /api/v1/programs/plan?program=%E6%96%B0%E9%97%BB%E5%AD%A6 HTTP/1.1" 200 OK
+2026-08-27 12:43:55,250 [fuxiaohe] INFO request
+INFO:     127.0.0.1:63051 - "GET /api/v1/profile HTTP/1.1" 200 OK
+2026-08-27 12:43:55,510 [fuxiaohe] INFO request
+INFO:     127.0.0.1:65181 - "POST /api/v1/recommend HTTP/1.1" 200 OK
+2026-08-27 12:43:57,579 [fuxiaohe] INFO request
+INFO:     127.0.0.1:63165 - "POST /api/v1/chat HTTP/1.1" 200 OK
+2026-08-27 12:43:59,917 [fuxiaohe] INFO request
+INFO:     127.0.0.1:52498 - "POST /api/v1/chat HTTP/1.1" 200 OK
+2026-08-27 12:44:03,327 [fuxiaohe] INFO request
+INFO:     127.0.0.1:60939 - "GET /api/v1/profile HTTP/1.1" 200 OK
+2026-08-27 12:44:03,663 [fuxiaohe] INFO request
+INFO:     127.0.0.1:49671 - "POST /api/v1/recommend HTTP/1.1" 200 OK
+2026-08-27 12:44:06,184 [fuxiaohe] INFO request
+INFO:     127.0.0.1:52146 - "GET /api/v1/jobs HTTP/1.1" 200 OK
+2026-08-27 12:44:12,391 [fuxiaohe] INFO request
+INFO:     127.0.0.1:61130 - "GET /api/v1/jobs/job001 HTTP/1.1" 200 OK
+2026-08-27 12:44:14,030 [fuxiaohe] INFO request
+INFO:     127.0.0.1:57059 - "GET /api/v1/jobs HTTP/1.1" 200 OK
+2026-08-27 12:44:17,739 [fuxiaohe] INFO request
+INFO:     127.0.0.1:54507 - "GET /api/v1/profile HTTP/1.1" 200 OK
+2026-08-27 12:44:17,986 [fuxiaohe] INFO request
+INFO:     127.0.0.1:62068 - "POST /api/v1/recommend HTTP/1.1" 200 OK
+2026-08-27 12:44:20,021 [fuxiaohe] INFO request
+INFO:     127.0.0.1:53680 - "GET /api/v1/jobs HTTP/1.1" 200 OK
+2026-08-27 12:44:23,668 [fuxiaohe] INFO request
+INFO:     127.0.0.1:49907 - "GET /api/v1/programs HTTP/1.1" 200 OK
+2026-08-27 12:44:23,919 [fuxiaohe] INFO request
+INFO:     127.0.0.1:54989 - "GET /api/v1/programs/plan?program=%E6%96%B0%E9%97%BB%E5%AD%A6 HTTP/1.1" 200 OK
+2026-08-27 12:44:30,801 [fuxiaohe] INFO request
+INFO:     127.0.0.1:52826 - "GET /api/v1/profile HTTP/1.1" 200 OK
+2026-08-27 12:44:34,914 [fuxiaohe] INFO request
+INFO:     127.0.0.1:61457 - "GET /api/v1/profile HTTP/1.1" 200 OK
+2026-08-27 12:44:39,021 [fuxiaohe] INFO request
+INFO:     127.0.0.1:61464 - "POST /api/v1/auth/nickname HTTP/1.1" 200 OK
+2026-08-27 12:44:39,371 [fuxiaohe] INFO request
+INFO:     127.0.0.1:61465 - "PUT /api/v1/profile HTTP/1.1" 200 OK
+2026-08-27 12:44:39,612 [fuxiaohe] INFO request
+INFO:     127.0.0.1:58981 - "GET /api/v1/profile HTTP/1.1" 200 OK
+2026-08-27 12:44:52,796 [fuxiaohe] INFO request
+INFO:     127.0.0.1:55610 - "GET /api/v1/profile HTTP/1.1" 200 OK
+2026-08-27 12:44:56,749 [fuxiaohe] INFO request
+INFO:     127.0.0.1:55617 - "GET /api/v1/profile HTTP/1.1" 200 OK
+2026-08-27 12:45:01,456 [fuxiaohe] INFO request
+INFO:     127.0.0.1:62126 - "GET /api/v1/profile HTTP/1.1" 200 OK
+2026-08-27 12:45:10,305 [fuxiaohe] INFO request
+INFO:     127.0.0.1:62964 - "GET /api/v1/profile HTTP/1.1" 200 OK
+2026-08-27 12:45:13,654 [fuxiaohe] INFO request
+INFO:     127.0.0.1:62969 - "GET /api/v1/profile HTTP/1.1" 200 OK
+2026-08-27 12:45:13,998 [fuxiaohe] INFO request
+INFO:     127.0.0.1:49759 - "PUT /api/v1/profile HTTP/1.1" 200 OK
+2026-08-27 12:45:14,306 [fuxiaohe] INFO request
+INFO:     127.0.0.1:51111 - "GET /api/v1/profile HTTP/1.1" 200 OK
+2026-08-27 12:45:17,709 [fuxiaohe] INFO request
+INFO:     127.0.0.1:56536 - "GET /api/v1/programs HTTP/1.1" 200 OK
+2026-08-27 12:45:18,047 [fuxiaohe] INFO request
+INFO:     127.0.0.1:58670 - "GET /api/v1/programs/plan?program=%E6%96%B0%E9%97%BB%E5%AD%A6 HTTP/1.1" 200 OK
+2026-08-27 12:45:19,475 [fuxiaohe] INFO request
+INFO:     127.0.0.1:62641 - "GET /api/v1/profile HTTP/1.1" 200 OK
+2026-08-27 12:45:36,999 [fuxiaohe] INFO request
+INFO:     127.0.0.1:62923 - "GET /api/v1/profile HTTP/1.1" 200 OK
+2026-08-27 12:45:39,454 [fuxiaohe] INFO request
+INFO:     127.0.0.1:61621 - "POST /api/v1/auth/logout HTTP/1.1" 200 OK
+2026-08-27 13:25:23,488 [fuxiaohe] INFO request
+INFO:     127.0.0.1:52449 - "POST /api/v1/auth/login HTTP/1.1" 200 OK
+2026-08-27 13:25:23,535 [fuxiaohe] INFO request
+INFO:     127.0.0.1:52452 - "GET /api/v1/profile HTTP/1.1" 200 OK
+2026-08-27 13:25:23,553 [fuxiaohe] INFO request
+INFO:     127.0.0.1:52455 - "POST /api/v1/recommend HTTP/1.1" 200 OK
+2026-08-27 13:25:24,810 [fuxiaohe] INFO request
+INFO:     127.0.0.1:57174 - "GET /api/v1/conversations HTTP/1.1" 200 OK
+2026-08-27 13:25:26,430 [fuxiaohe] INFO request
+INFO:     127.0.0.1:59295 - "POST /api/v1/chat HTTP/1.1" 200 OK
+2026-08-27 13:25:26,449 [fuxiaohe] INFO request
+INFO:     127.0.0.1:59296 - "GET /api/v1/conversations HTTP/1.1" 200 OK
+2026-08-27 13:25:31,573 [fuxiaohe] INFO request
+INFO:     127.0.0.1:56230 - "GET /api/v1/profile HTTP/1.1" 200 OK
+2026-08-27 13:25:31,817 [fuxiaohe] INFO request
+INFO:     127.0.0.1:54339 - "POST /api/v1/recommend HTTP/1.1" 200 OK
+2026-08-27 13:25:32,900 [fuxiaohe] INFO request
+INFO:     127.0.0.1:54815 - "GET /api/v1/profile HTTP/1.1" 200 OK
+2026-08-27 13:25:33,976 [fuxiaohe] INFO request
+INFO:     127.0.0.1:63789 - "POST /api/v1/recommend HTTP/1.1" 200 OK
+2026-08-27 13:25:36,053 [fuxiaohe] INFO request
+INFO:     127.0.0.1:55499 - "GET /api/v1/profile HTTP/1.1" 200 OK
+2026-08-27 13:25:36,376 [fuxiaohe] INFO request
+INFO:     127.0.0.1:50984 - "POST /api/v1/recommend HTTP/1.1" 200 OK
+2026-08-27 13:27:52,200 [fuxiaohe] INFO request
+INFO:     127.0.0.1:61699 - "GET /api/v1/conversations HTTP/1.1" 200 OK
+2026-08-27 13:27:52,891 [fuxiaohe] INFO request
+INFO:     127.0.0.1:54882 - "POST /api/v1/chat HTTP/1.1" 200 OK
+2026-08-27 13:27:53,214 [fuxiaohe] INFO request
+INFO:     127.0.0.1:60998 - "GET /api/v1/conversations HTTP/1.1" 200 OK
+2026-08-27 13:27:55,593 [fuxiaohe] INFO request
+INFO:     127.0.0.1:52952 - "GET /api/v1/profile HTTP/1.1" 200 OK
+2026-08-27 13:27:55,856 [fuxiaohe] INFO request
+INFO:     127.0.0.1:52809 - "POST /api/v1/recommend HTTP/1.1" 200 OK
+2026-08-27 13:27:58,836 [fuxiaohe] INFO request
+INFO:     127.0.0.1:50100 - "GET /api/v1/profile HTTP/1.1" 200 OK
+2026-08-27 13:27:59,883 [fuxiaohe] INFO request
+INFO:     127.0.0.1:55529 - "POST /api/v1/recommend HTTP/1.1" 200 OK
+2026-08-27 13:28:02,291 [fuxiaohe] INFO request
+INFO:     127.0.0.1:59005 - "GET /api/v1/profile HTTP/1.1" 200 OK
+2026-08-27 13:28:02,610 [fuxiaohe] INFO request
+INFO:     127.0.0.1:57945 - "POST /api/v1/recommend HTTP/1.1" 200 OK
+2026-08-27 13:28:07,671 [fuxiaohe] INFO request
+INFO:     127.0.0.1:63842 - "GET /api/v1/programs HTTP/1.1" 200 OK
+2026-08-27 13:28:07,993 [fuxiaohe] INFO request
+INFO:     127.0.0.1:55985 - "GET /api/v1/programs/plan?program=%E6%96%B0%E9%97%BB%E5%AD%A6 HTTP/1.1" 200 OK
+2026-08-27 13:28:09,855 [fuxiaohe] INFO request
+INFO:     127.0.0.1:62912 - "GET /api/v1/programs/plan?program=%E6%B3%95%E5%AD%A6 HTTP/1.1" 200 OK
+2026-08-27 13:28:12,606 [fuxiaohe] INFO request
+INFO:     127.0.0.1:61174 - "GET /api/v1/programs/plan?program=%E8%AE%A1%E7%AE%97%E6%9C%BA%E7%A7%91%E5%AD%A6%E4%B8%8E%E6%8A%80%E6%9C%AF HTTP/1.1" 200 OK
+2026-08-27 13:28:14,781 [fuxiaohe] INFO request
+INFO:     127.0.0.1:65011 - "GET /api/v1/profile HTTP/1.1" 200 OK
+2026-08-27 13:28:15,091 [fuxiaohe] INFO request
+INFO:     127.0.0.1:57408 - "POST /api/v1/recommend HTTP/1.1" 200 OK
+2026-08-27 13:28:39,295 [fuxiaohe] INFO request
+INFO:     127.0.0.1:57826 - "GET /api/v1/profile HTTP/1.1" 200 OK
+2026-08-27 13:28:40,794 [fuxiaohe] INFO request
+INFO:     127.0.0.1:55535 - "GET /api/v1/programs HTTP/1.1" 200 OK
+2026-08-27 13:28:41,111 [fuxiaohe] INFO request
+INFO:     127.0.0.1:53024 - "GET /api/v1/programs/plan?program=%E6%96%B0%E9%97%BB%E5%AD%A6 HTTP/1.1" 200 OK
+2026-08-27 13:28:41,842 [fuxiaohe] INFO request
+INFO:     127.0.0.1:62060 - "GET /api/v1/jobs HTTP/1.1" 200 OK
+2026-08-27 13:28:43,151 [fuxiaohe] INFO request
+INFO:     127.0.0.1:62934 - "GET /api/v1/profile HTTP/1.1" 200 OK
+2026-08-27 13:28:43,395 [fuxiaohe] INFO request
+INFO:     127.0.0.1:63361 - "POST /api/v1/recommend HTTP/1.1" 200 OK
+2026-08-27 13:28:43,471 [fuxiaohe] INFO request
+INFO:     127.0.0.1:61930 - "GET /api/v1/jobs HTTP/1.1" 200 OK
+2026-08-27 13:28:55,363 [fuxiaohe] INFO request
+INFO:     127.0.0.1:56571 - "GET /api/v1/profile HTTP/1.1" 200 OK
+2026-08-27 13:28:55,625 [fuxiaohe] INFO request
+INFO:     127.0.0.1:57793 - "POST /api/v1/recommend HTTP/1.1" 200 OK
+2026-08-27 13:32:59,687 [fuxiaohe] INFO request
+INFO:     127.0.0.1:60899 - "GET /api/v1/profile HTTP/1.1" 200 OK
+2026-08-27 13:32:59,936 [fuxiaohe] INFO request
+INFO:     127.0.0.1:63832 - "POST /api/v1/recommend HTTP/1.1" 200 OK
+2026-08-27 17:30:53,306 [fuxiaohe] INFO request
+INFO:     127.0.0.1:49944 - "GET /api/v1/profile HTTP/1.1" 200 OK
+2026-08-27 17:30:53,343 [fuxiaohe] INFO request
+INFO:     127.0.0.1:65147 - "POST /api/v1/recommend HTTP/1.1" 200 OK
+2026-08-27 18:25:38,845 [fuxiaohe] INFO request
+INFO:     127.0.0.1:58095 - "GET /api/v1/profile HTTP/1.1" 200 OK
+2026-08-27 18:25:38,879 [fuxiaohe] INFO request
+INFO:     127.0.0.1:58096 - "POST /api/v1/recommend HTTP/1.1" 200 OK
+2026-08-27 18:25:40,896 [fuxiaohe] INFO request
+INFO:     127.0.0.1:64663 - "GET /api/v1/programs HTTP/1.1" 200 OK
+2026-08-27 18:25:40,923 [fuxiaohe] INFO request
+INFO:     127.0.0.1:64664 - "GET /api/v1/programs/plan?program=%E6%96%B0%E9%97%BB%E5%AD%A6 HTTP/1.1" 200 OK
+2026-08-27 18:25:42,916 [fuxiaohe] INFO request
+INFO:     127.0.0.1:64667 - "GET /api/v1/jobs HTTP/1.1" 200 OK
+2026-08-27 20:07:28,256 [fuxiaohe] INFO request
+INFO:     127.0.0.1:58090 - "GET /api/v1/jobs HTTP/1.1" 200 OK
+2026-08-27 20:07:29,189 [fuxiaohe] INFO request
+INFO:     127.0.0.1:51644 - "GET /api/v1/jobs HTTP/1.1" 200 OK
+2026-08-27 20:07:32,482 [fuxiaohe] INFO request
+INFO:     127.0.0.1:60831 - "GET /api/v1/profile HTTP/1.1" 200 OK
+2026-08-27 20:07:32,518 [fuxiaohe] INFO request
+INFO:     127.0.0.1:60832 - "POST /api/v1/recommend HTTP/1.1" 200 OK
+2026-08-27 20:07:36,382 [fuxiaohe] INFO request
+INFO:     127.0.0.1:50282 - "GET /api/v1/profile HTTP/1.1" 200 OK
+2026-08-27 20:07:37,289 [fuxiaohe] INFO request
+INFO:     127.0.0.1:50291 - "POST /api/v1/recommend HTTP/1.1" 200 OK
+2026-08-27 20:07:46,320 [fuxiaohe] INFO request
+INFO:     127.0.0.1:61517 - "GET /api/v1/profile HTTP/1.1" 200 OK
+2026-08-27 20:07:46,352 [fuxiaohe] INFO request
+INFO:     127.0.0.1:61518 - "POST /api/v1/recommend HTTP/1.1" 200 OK
+2026-08-27 20:16:34,359 [fuxiaohe] INFO request
+INFO:     127.0.0.1:51614 - "GET /api/v1/jobs HTTP/1.1" 200 OK
+2026-08-27 20:16:35,193 [fuxiaohe] INFO request
+INFO:     127.0.0.1:56474 - "GET /api/v1/profile HTTP/1.1" 200 OK
+2026-08-27 20:16:35,527 [fuxiaohe] INFO request
+INFO:     127.0.0.1:51134 - "POST /api/v1/recommend HTTP/1.1" 200 OK
+2026-08-27 20:16:37,178 [fuxiaohe] INFO request
+INFO:     127.0.0.1:63929 - "GET /api/v1/profile HTTP/1.1" 200 OK
+2026-08-27 20:16:38,381 [fuxiaohe] INFO request
+INFO:     127.0.0.1:58204 - "POST /api/v1/recommend HTTP/1.1" 200 OK
+2026-08-28 00:17:21,645 [fuxiaohe] INFO request
+INFO:     127.0.0.1:55703 - "GET /api/v1/profile HTTP/1.1" 200 OK

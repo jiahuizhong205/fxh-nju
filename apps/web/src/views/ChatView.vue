@@ -9,6 +9,7 @@ const messagesEl = ref<HTMLElement | null>(null)
 const showSidebar = ref(false)
 
 onMounted(() => {
+  store.newChat()
   store.loadConversations()
 })
 
@@ -40,14 +41,16 @@ function selectConv(id: string) {
   store.loadMessages(id)
   showSidebar.value = false
 }
+
+function handleNewChat() {
+  store.newChat()
+  input.value = ''
+}
 </script>
 
 <template>
   <div class="chat-layout">
-    <!-- 侧边栏切换 -->
-    <button class="sidebar-toggle" @click="showSidebar = !showSidebar">☰</button>
-
-    <!-- 会话列表侧边栏 -->
+    <!-- 会话列表抽屉 -->
     <aside class="sidebar" :class="{ open: showSidebar }">
       <div class="sidebar-header">
         <button class="btn-new" @click="store.newChat(); showSidebar = false">+ 新对话</button>
@@ -69,13 +72,24 @@ function selectConv(id: string) {
 
     <!-- 对话区 -->
     <div class="chat-main">
+      <header class="chat-head">
+        <router-link to="/" class="back">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="m15 18-6-6 6-6"/>
+          </svg>
+        </router-link>
+        <h2>政策答疑</h2>
+        <button class="btn-newchat" @click="handleNewChat">＋ 新对话</button>
+        <button class="history-btn" @click="showSidebar = !showSidebar">☰</button>
+      </header>
+
       <div ref="messagesEl" class="messages">
         <div v-if="store.messages.length === 0 && !store.streaming" class="welcome">
-          <h2>你好，我是福小禾 👋</h2>
-          <p>南大辅修政策答疑助手，可以问我辅修政策、学分要求、证书规则等问题。</p>
+          <h2>福小禾伴学精灵智能问答 🌱</h2>
+          <p>你好呀！我是你的伴学精灵福小禾，可以问我辅修政策、学分要求、证书规则等问题。</p>
           <div class="quick-questions">
             <button
-              v-for="q in ['辅修和双学位有什么区别？', '辅修需要修多少学分？', '如何通过辅修转专业？']"
+              v-for="q in ['辅修毕业设计要求', '学分互认政策', '双学位收费标准']"
               :key="q"
               class="quick-btn"
               @click="store.send(q)"
@@ -104,7 +118,7 @@ function selectConv(id: string) {
       <div class="input-area">
         <textarea
           v-model="input"
-          placeholder="输入你的问题，如：辅修和双学位有什么区别？"
+          placeholder="向福小禾提问关于辅修的一切..."
           rows="2"
           :disabled="store.streaming"
           @keydown="handleKeydown"
@@ -128,70 +142,78 @@ function selectConv(id: string) {
 </template>
 
 <style scoped>
-.chat-layout { display: flex; flex: 1; overflow: hidden; position: relative; }
-
-.sidebar-toggle {
-  position: absolute; top: 8px; left: 8px; z-index: 10;
-  background: #fff; border: 1px solid #ddd; border-radius: 6px;
-  padding: 6px 10px; cursor: pointer; font-size: 1.1rem;
-}
+.chat-layout { height: 100%; display: flex; overflow: hidden; position: relative; }
 
 .sidebar {
-  width: 260px; background: #fff; border-right: 1px solid #e5e7eb;
-  display: flex; flex-direction: column; flex-shrink: 0;
+  position: fixed; left: 0; top: 0; bottom: 0; z-index: 20;
+  width: 260px; background: var(--bg-surface); border-right: 1px solid var(--border);
+  display: flex; flex-direction: column; transform: translateX(-100%);
   transition: transform 0.2s;
 }
-@media (max-width: 640px) {
-  .sidebar { position: fixed; left: 0; top: 0; bottom: 0; z-index: 20; transform: translateX(-100%); }
-  .sidebar.open { transform: translateX(0); }
-}
-
-.sidebar-header { padding: 12px; }
+.sidebar.open { transform: translateX(0); }
+.sidebar-header { padding: var(--space-3); }
 .btn-new {
-  width: 100%; padding: 8px; background: #7c3aed; color: #fff;
-  border: none; border-radius: 6px; cursor: pointer; font-size: 0.9rem;
+  width: 100%; padding: var(--space-2); background: var(--brand-strong); color: #fff;
+  border: none; border-radius: var(--radius-md); cursor: pointer; font-size: var(--text-base);
 }
 .conv-list { flex: 1; overflow-y: auto; }
 .conv-item {
-  padding: 10px 14px; cursor: pointer; border-bottom: 1px solid #f3f4f6;
-  font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  padding: var(--space-3) var(--space-4); cursor: pointer; border-bottom: 1px solid var(--bg-subtle);
+  font-size: var(--text-base); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  color: var(--text-secondary);
 }
-.conv-item:hover { background: #f9fafb; }
-.conv-item.active { background: #ede9fe; color: #5b21b6; font-weight: 500; }
+.conv-item:hover { background: var(--bg-green-faint); }
+.conv-item.active { background: var(--bg-green-faint); color: var(--brand-strong); font-weight: var(--weight-medium); }
 
-.overlay { display: none; }
-@media (max-width: 640px) {
-  .overlay { display: block; position: fixed; inset: 0; background: rgba(0,0,0,0.3); z-index: 15; }
-}
+.overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.3); z-index: 15; }
 
 .chat-main {
   flex: 1; display: flex; flex-direction: column; overflow: hidden;
 }
 
+.chat-head {
+  display: flex; align-items: center; gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--bg-page); border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+.chat-head h2 { flex: 1; text-align: center; font-size: var(--text-lg); font-weight: var(--weight-bold); color: var(--text-primary); }
+.btn-newchat {
+  padding: var(--space-1) var(--space-3); border-radius: var(--radius-full);
+  background: var(--brand-strong); color: #fff; border: none; cursor: pointer;
+  font-size: var(--text-sm); font-weight: var(--weight-medium); white-space: nowrap;
+}
+.history-btn {
+  width: 36px; height: 36px; border-radius: var(--radius-full);
+  background: var(--bg-surface); border: 1px solid var(--border);
+  color: var(--text-secondary); cursor: pointer; font-size: var(--text-base);
+  display: flex; align-items: center; justify-content: center;
+}
+
 .messages {
-  flex: 1; overflow-y: auto; padding: 16px 20px;
+  flex: 1; overflow-y: auto; padding: var(--space-4);
+  display: flex; flex-direction: column;
 }
 
 .welcome {
-  text-align: center; padding: 60px 20px;
+  margin: auto; text-align: center; padding: var(--space-8) var(--space-4);
 }
-.welcome h2 { font-size: 1.6rem; margin-bottom: 8px; color: #333; }
-.welcome p { color: #666; margin-bottom: 24px; }
-.quick-questions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.welcome h2 { font-size: var(--text-xl); margin-bottom: var(--space-2); color: var(--text-primary); }
+.welcome p { color: var(--text-secondary); margin-bottom: var(--space-6); }
+.quick-questions { display: flex; flex-wrap: wrap; gap: var(--space-2); justify-content: center; }
 .quick-btn {
-  padding: 8px 16px; background: #fff; border: 1px solid #d4d4d8;
-  border-radius: 20px; cursor: pointer; font-size: 0.85rem; color: #5b21b6;
+  padding: var(--space-2) var(--space-4); background: var(--bg-surface); border: 1px solid var(--border);
+  border-radius: var(--radius-full); cursor: pointer; font-size: var(--text-sm); color: var(--brand-strong);
   transition: border-color 0.15s;
 }
-.quick-btn:hover { border-color: #7c3aed; }
+.quick-btn:hover { border-color: var(--brand-strong); }
 
-.streaming-bubble { padding: 12px 0; }
-.streaming-status { font-size: 0.8rem; color: #9ca3af; margin-bottom: 6px; }
-.streaming-content { font-size: 0.95rem; line-height: 1.6; color: #333; }
+.streaming-bubble { padding: var(--space-3) 0; }
+.streaming-status { font-size: var(--text-sm); color: var(--text-muted); margin-bottom: var(--space-2); }
+.streaming-content { font-size: var(--text-base); line-height: 1.6; color: var(--text-primary); }
 
 .typing-dots { display: flex; gap: 4px; }
 .typing-dots span {
-  width: 6px; height: 6px; background: #a78bfa; border-radius: 50%;
+  width: 6px; height: 6px; background: var(--brand); border-radius: var(--radius-full);
   animation: bounce 1.4s infinite both;
 }
 .typing-dots span:nth-child(2) { animation-delay: 0.2s; }
@@ -202,21 +224,21 @@ function selectConv(id: string) {
 }
 
 .input-area {
-  padding: 12px 20px; background: #fff; border-top: 1px solid #e5e7eb;
-  display: flex; gap: 10px; align-items: flex-end;
+  padding: var(--space-3) var(--space-4); background: var(--bg-surface); border-top: 1px solid var(--border);
+  display: flex; gap: var(--space-2); align-items: flex-end;
 }
 .input-area textarea {
-  flex: 1; padding: 10px 14px; border: 1px solid #d4d4d8;
-  border-radius: 10px; resize: none; font-size: 0.95rem; outline: none;
-  font-family: inherit; line-height: 1.5;
+  flex: 1; padding: var(--space-2) var(--space-3); border: 1px solid var(--border);
+  border-radius: var(--radius-md); resize: none; font-size: var(--text-base); outline: none;
+  font-family: inherit; line-height: 1.5; background: var(--bg-surface); color: var(--text-primary);
 }
-.input-area textarea:focus { border-color: #7c3aed; }
+.input-area textarea:focus { border-color: var(--brand); }
 
 .btn-send, .btn-cancel {
-  padding: 8px 20px; border: none; border-radius: 8px;
-  cursor: pointer; font-size: 0.9rem; font-weight: 500;
+  padding: var(--space-2) var(--space-5); border: none; border-radius: var(--radius-md);
+  cursor: pointer; font-size: var(--text-base); font-weight: var(--weight-medium);
 }
-.btn-send { background: #7c3aed; color: #fff; }
-.btn-send:disabled { background: #c4b5fd; cursor: not-allowed; }
+.btn-send { background: var(--brand-strong); color: #fff; }
+.btn-send:disabled { background: var(--bg-subtle); color: var(--text-muted); cursor: not-allowed; }
 .btn-cancel { background: #ef4444; color: #fff; }
 </style>

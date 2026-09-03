@@ -53,13 +53,14 @@ const selfStudyTopics = [
 <template>
   <div class="tutor-page">
     <div class="tutor-card">
-      <h2>复合方向伴学</h2>
+      <h2>漫步知识森林 🌲</h2>
+      <p class="level">LV.4 园艺学者</p>
       <div class="mode-switch">
         <button :class="{ active: mode === 'enrolled' }" @click="mode = 'enrolled'">
-          在校辅修模式
+          在校辅修小径
         </button>
         <button :class="{ active: mode === 'self_study' }" @click="mode = 'self_study'">
-          独立自学模式
+          独立自学小径
         </button>
       </div>
       <p class="mode-desc">
@@ -96,14 +97,15 @@ const selfStudyTopics = [
 <style scoped>
 .tutor-page { flex: 1; display: flex; justify-content: center; padding: 32px 20px; overflow-y: auto; }
 .tutor-card { width: 100%; max-width: 660px; }
-h2 { font-size: 1.3rem; margin-bottom: 12px; }
+h2 { font-size: 1.3rem; margin-bottom: 4px; }
+.level { color: var(--brand-strong); font-size: 0.8rem; margin-bottom: 12px; }
 
 .mode-switch { display: flex; gap: 4px; margin-bottom: 8px; }
 .mode-switch button {
   flex: 1; padding: 10px; border: 1px solid #d4d4d8; background: #fff;
   border-radius: 8px; cursor: pointer; font-size: 0.9rem;
 }
-.mode-switch button.active { background: #7c3aed; color: #fff; border-color: #7c3aed; }
+.mode-switch button.active { background: #5a7a6b; color: #fff; border-color: #5a7a6b; }
 .mode-desc { color: #6b7280; font-size: 0.85rem; margin-bottom: 16px; }
 
 .topic-suggestions { margin-bottom: 16px; }
@@ -111,21 +113,21 @@ h2 { font-size: 1.3rem; margin-bottom: 12px; }
 .topic-btn {
   padding: 4px 12px; background: #f3f4f6; border: 1px solid #e5e7eb;
   border-radius: 16px; cursor: pointer; font-size: 0.8rem; margin: 2px 4px;
-  color: #5b21b6;
+  color: #5a7a6b;
 }
-.topic-btn:hover { background: #ede9fe; }
+.topic-btn:hover { background: #f4f8f2; }
 
 .qa-area { display: flex; gap: 8px; align-items: flex-end; }
 .qa-area textarea {
   flex: 1; padding: 10px 14px; border: 1px solid #d4d4d8; border-radius: 10px;
   font-size: 0.95rem; font-family: inherit; resize: none;
 }
-.qa-area textarea:focus { border-color: #7c3aed; outline: none; }
+.qa-area textarea:focus { border-color: #5a7a6b; outline: none; }
 .qa-area button {
-  padding: 10px 20px; background: #7c3aed; color: #fff; border: none;
+  padding: 10px 20px; background: #5a7a6b; color: #fff; border: none;
   border-radius: 8px; cursor: pointer; font-size: 0.9rem;
 }
-.qa-area button:disabled { background: #c4b5fd; cursor: not-allowed; }
+.qa-area button:disabled { background: #dce6d2; cursor: not-allowed; }
 
 .answer-box { margin-top: 20px; }
 .answer-content {

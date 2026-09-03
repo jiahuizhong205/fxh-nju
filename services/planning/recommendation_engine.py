@@ -21,6 +21,7 @@ PROGRAMS: list[dict] = [
         "required_math_level": "",
         "semesters_needed": 4,
         "discipline": "文学",
+        "department": "新闻传播学院",
     },
     {
         "name": "法学",
@@ -34,6 +35,7 @@ PROGRAMS: list[dict] = [
         "required_math_level": "",
         "semesters_needed": 5,
         "discipline": "法学",
+        "department": "法学院",
     },
     {
         "name": "计算机科学与技术",
@@ -48,6 +50,7 @@ PROGRAMS: list[dict] = [
         "required_math_level": "高等数学（一）或高等数学（二）",
         "semesters_needed": 5,
         "discipline": "工学",
+        "department": "计算机学院",
     },
     {
         "name": "金融学",
@@ -62,6 +65,7 @@ PROGRAMS: list[dict] = [
         "required_math_level": "高等数学（一）",
         "semesters_needed": 5,
         "discipline": "经济学",
+        "department": "商学院",
     },
 ]
 
@@ -171,18 +175,13 @@ def score_program(program: dict, profile: dict) -> ScoreResult:
     else:
         scores["campus_feasibility"] = 0.8
 
-    # overlap_efficiency (0.10)
-    major = profile.get("major", "")
-    if major and any(w in program["name"] for w in major):
-        scores["overlap_efficiency"] = 0.9  # 高度相关，课程重合多
-    else:
-        scores["overlap_efficiency"] = 0.5
-
     # weighted sum
+    # ponytail: overlap_efficiency（与主修课程重合度）依赖各院系自身培养方案数据，暂缺，不参与评分。
+    # 其余 5 项按原比例归一化到 1.0。
     weights = {
-        "interest_fit": 0.25, "career_fit": 0.20,
-        "prerequisite_readiness": 0.20, "schedule_feasibility": 0.15,
-        "campus_feasibility": 0.10, "overlap_efficiency": 0.10,
+        "interest_fit": 0.28, "career_fit": 0.22,
+        "prerequisite_readiness": 0.22, "schedule_feasibility": 0.17,
+        "campus_feasibility": 0.11,
     }
     total = sum(scores[k] * weights.get(k, 0) for k in scores)
 
@@ -194,10 +193,11 @@ def score_program(program: dict, profile: dict) -> ScoreResult:
     )
 
 
-def recommend(profile: dict) -> list[dict]:
+def recommend(profile: dict, programs: list[dict] | None = None) -> list[dict]:
     """执行硬过滤 + 评分排序，返回 Top-N 推荐。"""
+    programs = programs or PROGRAMS
     results = []
-    for prog in PROGRAMS:
+    for prog in programs:
         filt = hard_filter(prog, profile)
         if not filt.passed:
             continue

@@ -10,7 +10,8 @@ from apps.api.database import Base
 
 
 def utcnow():
-    return datetime.now(timezone.utc)
+    # naive UTC：列是 DateTime（无时区），存 aware 会被 asyncpg 拒绝
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 class Document(Base):
@@ -22,6 +23,7 @@ class Document(Base):
     trust_level: Mapped[str] = mapped_column(String(1))  # S/A/B/C
     file_hash: Mapped[str] = mapped_column(String(64), unique=True)
     raw_path: Mapped[str] = mapped_column(Text)
+    source_url: Mapped[str] = mapped_column(Text, default="")
     valid_from: Mapped[datetime] = mapped_column(DateTime, nullable=True)
     valid_to: Mapped[datetime] = mapped_column(DateTime, nullable=True)
     knowledge_version: Mapped[str] = mapped_column(String(20), default="v1")
@@ -41,10 +43,23 @@ class DocumentChunk(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    username: Mapped[str] = mapped_column(String(50), unique=True)
+    password_hash: Mapped[str] = mapped_column(String(128))
+    salt: Mapped[str] = mapped_column(String(32))
+    nickname: Mapped[str] = mapped_column(String(50), default="")
+    token: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
 class StudentProfile(Base):
     __tablename__ = "student_profiles"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=True)
     major: Mapped[str] = mapped_column(String(200))
     grade: Mapped[str] = mapped_column(String(20))  # 大一/大二/大三/大四
     campus: Mapped[str] = mapped_column(String(50), default="")  # 仙林/鼓楼/苏州
@@ -79,3 +94,65 @@ class Message(Base):
     content: Mapped[str] = mapped_column(Text)
     citations: Mapped[list] = mapped_column(JSON, default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class Program(Base):
+    __tablename__ = "programs"
+
+    name: Mapped[str] = mapped_column(String(200), primary_key=True)
+    total_credits: Mapped[int] = mapped_column()
+    campus: Mapped[str] = mapped_column(String(50))
+    subject_rank: Mapped[str] = mapped_column(String(10))
+    core_courses: Mapped[list] = mapped_column(JSON, default=list)
+    required_math: Mapped[bool] = mapped_column(default=False)
+    required_math_level: Mapped[str] = mapped_column(String(200), default="")
+    semesters_needed: Mapped[int] = mapped_column(default=4)
+    discipline: Mapped[str] = mapped_column(String(50))
+    department: Mapped[str] = mapped_column(String(100), default="")  # 所属院系，对应 Course.department
+
+
+class ProgramPlanItem(Base):
+    __tablename__ = "program_plan_items"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    program_name: Mapped[str] = mapped_column(ForeignKey("programs.name", ondelete="CASCADE"))
+    semester: Mapped[int] = mapped_column()
+    term: Mapped[str] = mapped_column(String(20))
+    course: Mapped[str] = mapped_column(String(200))
+    credits: Mapped[int] = mapped_column()
+    campus: Mapped[str] = mapped_column(String(50))
+
+
+class Course(Base):
+    """选课系统实际开设的课程（按教学班，同一课程可能有多个班）。"""
+    __tablename__ = "courses"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    teaching_class_id: Mapped[str] = mapped_column(String(64), unique=True)  # 教学班ID（去重键）
+    course_number: Mapped[str] = mapped_column(String(50), default="")
+    course_name: Mapped[str] = mapped_column(String(200))
+    teacher: Mapped[str] = mapped_column(String(500), default="")
+    credit: Mapped[float] = mapped_column(Float)
+    hours: Mapped[int] = mapped_column(default=0)
+    teaching_class_type: Mapped[str] = mapped_column(String(20), default="")  # KZY=跨专业 / GG02=公选
+    campus: Mapped[str] = mapped_column(String(50), default="")
+    department: Mapped[str] = mapped_column(String(200), default="")
+    teaching_place: Mapped[str] = mapped_column(Text, default="")
+    school_term: Mapped[str] = mapped_column(String(20), default="")
+    source: Mapped[str] = mapped_column(String(100), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class Job(Base):
+    __tablename__ = "jobs"
+
+    id: Mapped[str] = mapped_column(String(50), primary_key=True)
+    employer: Mapped[str] = mapped_column(String(200))
+    title: Mapped[str] = mapped_column(String(200))
+    location: Mapped[str] = mapped_column(String(200))
+    majors: Mapped[list] = mapped_column(JSON, default=list)
+    preferred_cross: Mapped[list] = mapped_column(JSON, default=list)
+    skills_required: Mapped[list] = mapped_column(JSON, default=list)
+    skills_preferred: Mapped[list] = mapped_column(JSON, default=list)
+    deadline: Mapped[str] = mapped_column(String(20))
+    source: Mapped[str] = mapped_column(String(100))

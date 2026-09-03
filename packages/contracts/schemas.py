@@ -12,6 +12,7 @@ class Citation(BaseModel):
     excerpt: str
     trust_level: Literal["S", "A", "B", "C"]
     valid_from: datetime | None = None
+    source_url: str = ""
 
 
 class AssistantAnswer(BaseModel):

@@ -69,6 +69,7 @@ class PlanAgent:
                 "available_programs": list(PROGRAM_PLANS.keys()),
             }
 
+        # ponytail: 接真实 LLM 时改传 await _load_plans(self.db)，当前读引擎内存常量
         result = generate_plan(program_name, profile)
         return {"study_plan": {
             "program": result.program_name,

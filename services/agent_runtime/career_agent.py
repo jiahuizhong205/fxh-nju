@@ -63,6 +63,7 @@ class CareerAgent:
                 minor = prog_name
                 break
 
+        # ponytail: 接真实 LLM 时改传 await _load_jobs(self.db)，当前读引擎内存常量
         matches = match_jobs(major, minor)
         return {"candidate_programs": matches}
 

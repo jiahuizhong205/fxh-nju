@@ -6,7 +6,7 @@ const route = useRoute()
 const tabs = [
   { to: '/', label: '花园', icon: '<path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M9 21v-6h6v6"/>' },
   { to: '/career', label: '探索', icon: '<circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/>' },
-  { to: '/tutor', label: '日程', icon: '<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>' },
+  { to: '/course-planning', label: '日程', icon: '<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>' },
   { to: '/profile', label: '我的', icon: '<circle cx="12" cy="12" r="10"/><circle cx="12" cy="10" r="3"/><path d="M7 20.66V19a5 5 0 0 1 10 0v1.66"/>' },
 ]
 
@@ -16,7 +16,10 @@ function isActive(path: string) {
 </script>
 
 <template>
-  <div class="app">
+  <div v-if="route.name === 'login'" class="app app-plain">
+    <RouterView />
+  </div>
+  <div v-else class="app">
     <header class="app-header">
       <h1>福小禾</h1>
       <span class="subtitle">南大复合型人才学习助手</span>
@@ -66,6 +69,10 @@ body {
   margin: 0 auto;
   background: var(--bg-page);
   box-shadow: 0 0 32px rgba(0, 0, 0, 0.08);
+}
+
+.app-plain {
+  box-shadow: none;
 }
 
 .app-header {

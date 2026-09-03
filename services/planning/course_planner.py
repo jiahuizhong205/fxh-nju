@@ -63,9 +63,10 @@ class PlanResult:
     infeasible: bool = False
 
 
-def generate_plan(program_name: str, profile: dict) -> PlanResult:
+def generate_plan(program_name: str, profile: dict, plans: dict | None = None) -> PlanResult:
     """生成课程规划——贪心分配 + 约束检查。"""
-    courses = PROGRAM_PLANS.get(program_name, [])
+    plans = plans or PROGRAM_PLANS
+    courses = plans.get(program_name, [])
     if not courses:
         return PlanResult(program_name=program_name, infeasible=True, warnings=[f"未找到{program_name}的培养方案"])
 

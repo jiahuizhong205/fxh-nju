@@ -54,6 +54,7 @@ class RecommendAgent:
 
         profile = {
             "major": p.major, "grade": p.grade, "campus": p.campus,
+            "interests": p.interests or [], "strengths": p.strengths or [],
             "career_goals": p.career_goals,
             "math_willingness": p.math_willingness,
             "campus_flexibility": p.campus_flexibility,
@@ -71,6 +72,7 @@ class RecommendAgent:
                 "warnings": state.get("warnings", []) + ["无画像数据，无法推荐"],
             }
 
+        # ponytail: 接真实 LLM 时改传 await _load_programs(self.db)，当前读引擎内存常量
         results = recommend(profile)
         return {"candidate_programs": results}
 
