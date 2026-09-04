@@ -40,20 +40,14 @@ async function submit() {
   <div class="login">
     <div class="fern fern-tl" aria-hidden="true">
       <svg viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="2" opacity="0.3">
-        <path d="M10 90 C 20 60, 15 40, 10 10" />
-        <path d="M10 70 C 30 65, 45 60, 60 55" />
-        <path d="M10 55 C 30 50, 45 45, 58 40" />
-        <path d="M10 40 C 28 38, 42 34, 52 28" />
-        <path d="M10 70 C -5 62, -12 55, -18 45" />
-        <path d="M10 55 C -2 50, -8 44, -12 36" />
+        <path d="M6 82 C 24 57, 34 35, 63 18 C 76 10, 88 5, 98 2 C 101 25, 98 47, 86 62 C 67 85, 37 92, 6 82 Z" />
+        <path d="M6 82 C 35 63, 59 39, 98 2" />
       </svg>
     </div>
     <div class="fern fern-br" aria-hidden="true">
       <svg viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="2" opacity="0.3">
-        <path d="M90 10 C 80 40, 85 60, 90 90" />
-        <path d="M90 30 C 70 35, 55 40, 40 45" />
-        <path d="M90 45 C 70 50, 55 55, 42 60" />
-        <path d="M90 60 C 72 62, 58 66, 48 72" />
+        <path d="M94 18 C 70 25, 47 38, 31 58 C 20 72, 14 88, 11 99 C 34 98, 57 91, 72 77 C 89 61, 95 40, 94 18 Z" />
+        <path d="M11 99 C 36 73, 60 50, 94 18" />
       </svg>
     </div>
 
@@ -106,7 +100,11 @@ async function submit() {
         </div>
       </div>
 
-      <p class="agreement">南京大学 · 三三制花园</p>
+      <p class="agreement">
+        <span class="agreement-leaf" aria-hidden="true"><svg viewBox="0 0 32 18" fill="none"><path d="M2 13 C 9 3, 19 2, 29 3 C 24 12, 14 16, 2 13 Z"/><path d="M2 13 C 10 11, 18 7, 29 3"/></svg></span>
+        <span>南京大学 · 三三制花园</span>
+        <span class="agreement-leaf agreement-leaf-right" aria-hidden="true"><svg viewBox="0 0 32 18" fill="none"><path d="M30 13 C 23 3, 13 2, 3 3 C 8 12, 18 16, 30 13 Z"/><path d="M30 13 C 22 11, 14 7, 3 3"/></svg></span>
+      </p>
     </div>
   </div>
 </template>
@@ -128,12 +126,13 @@ async function submit() {
   position: absolute;
   color: var(--brand-strong);
 }
-.fern-tl { top: -26px; left: -28px; width: 176px; height: 176px; transform: rotate(-8deg); }
-.fern-br { bottom: -28px; right: -30px; width: 176px; height: 176px; transform: rotate(172deg); }
-.fern svg { opacity: 0.22; stroke-width: 1.4; }
+.fern-tl { top: -30px; left: -44px; width: 198px; height: 198px; transform: rotate(-5deg); }
+.fern-br { bottom: -6px; right: -44px; width: 198px; height: 198px; transform: rotate(0deg); }
+.fern svg { width: 100%; height: 100%; opacity: 0.22; stroke-width: 1.3; }
 
 .login-body {
   position: relative;
+  z-index: 1;
   width: 100%;
   max-width: 390px;
   min-height: 100vh;
@@ -232,11 +231,18 @@ async function submit() {
 }
 .agreement {
   margin-top: var(--space-5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
   font-size: var(--text-xs);
   color: #999a91;
   letter-spacing: 0.08em;
   text-align: center;
 }
+.agreement-leaf { width: 30px; height: 18px; color: #86a989; display: inline-flex; }
+.agreement-leaf svg { width: 100%; height: 100%; stroke: currentColor; stroke-width: 1.7; }
+.agreement-leaf-right { transform: scaleX(-1); }
 
 @media (max-height: 720px) {
   .login-body { padding-top: 48px; }
