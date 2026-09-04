@@ -56,6 +56,18 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
+class Feedback(Base):
+    __tablename__ = "feedback"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    feedback_type: Mapped[str] = mapped_column(String(50))
+    content: Mapped[str] = mapped_column(Text)
+    contact: Mapped[str] = mapped_column(String(200), default="")
+    attachments: Mapped[list] = mapped_column(JSON, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
 class StudentProfile(Base):
     __tablename__ = "student_profiles"
 

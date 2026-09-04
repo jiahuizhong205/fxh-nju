@@ -1,40 +1,35 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import { sendMessage } from '../api/client'
 
 const mode = ref<'enrolled' | 'self_study'>('enrolled')
 const question = ref('')
 const answer = ref('')
 const loading = ref(false)
+const error = ref('')
+let controller: AbortController | null = null
 
 async function ask() {
   if (!question.value.trim()) return
-  loading.value = true; answer.value = ''
-
-  const intent = mode.value === 'enrolled' ? 'tutor' : 'tutor'
-  const res = await fetch('/api/v1/chat', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message: question.value, intent }),
-  })
-  const reader = res.body?.getReader()
-  if (!reader) { loading.value = false; return }
-  const decoder = new TextDecoder()
-  let buffer = ''
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-    buffer += decoder.decode(value, { stream: true })
-    for (const line of buffer.split('\n')) {
-      if (line.startsWith('data: ')) {
-        try {
-          const d = JSON.parse(line.slice(6))
-          if (d.content) answer.value += d.content
-        } catch {}
-      }
-    }
-    buffer = ''
-  }
-  loading.value = false
+  loading.value = true
+  answer.value = ''
+  error.value = ''
+  controller = sendMessage(
+    question.value,
+    null,
+    () => {},
+    text => { answer.value += text },
+    () => {},
+    final => {
+      if (!answer.value) answer.value = final.content
+      loading.value = false
+    },
+    err => {
+      error.value = err
+      loading.value = false
+    },
+    mode.value === 'enrolled' ? 'tutor_enrolled' : 'tutor_self_study',
+  )
 }
 
 const enrolledTopics = [
@@ -90,6 +85,7 @@ const selfStudyTopics = [
       <div v-if="answer" class="answer-box">
         <div class="answer-content" v-html="answer.replace(/\n/g, '<br>')" />
       </div>
+      <p v-if="error" class="error">{{ error }}</p>
     </div>
   </div>
 </template>
@@ -134,4 +130,5 @@ h2 { font-size: 1.3rem; margin-bottom: 4px; }
   padding: 16px; background: #fff; border: 1px solid #e5e7eb;
   border-radius: 10px; font-size: 0.95rem; line-height: 1.7;
 }
+.error { margin-top: 12px; color: #b45309; font-size: 0.9rem; }
 </style>

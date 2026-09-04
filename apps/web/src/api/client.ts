@@ -49,13 +49,14 @@ export function sendMessage(
   onCitation: (cit: Citation) => void,
   onFinal: (data: any) => void,
   onError: (err: string) => void,
+  intent = 'policy',
 ): AbortController {
   const controller = new AbortController()
 
   fetch(`${BASE}/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...authHeaders() },
-    body: JSON.stringify({ message, thread_id: threadId }),
+    body: JSON.stringify({ message, thread_id: threadId, intent }),
     signal: controller.signal,
   }).then(async (res) => {
     if (!res.ok) {
@@ -287,6 +288,20 @@ export async function savePreferences(preferences: UserPreferences): Promise<Use
   })
   const data = await jsonResponse<{ preferences: UserPreferences }>(res, '偏好设置保存失败')
   return data.preferences ?? {}
+}
+
+export async function submitFeedback(payload: {
+  feedback_type: string
+  content: string
+  contact?: string
+  attachments?: string[]
+}): Promise<{ id: string; status: string }> {
+  const res = await fetch(`${BASE}/feedback`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify(payload),
+  })
+  return jsonResponse<{ id: string; status: string }>(res, '反馈提交失败')
 }
 
 const FAVORITE_JOBS_KEY = 'fxh_favorite_jobs'

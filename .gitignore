@@ -12,3 +12,6 @@ dist/
 .mypy_cache/
 .DS_Store
 tmp/
+
+# local development runtime logs
+*.log
