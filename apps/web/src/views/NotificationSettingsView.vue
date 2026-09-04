@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { onMounted, ref } from 'vue'
+import { fetchPreferences, savePreferences } from '../api/client'
 
 const settings = ref([
   { icon: '📚', label: '学习浇水提醒', desc: '每周学习计划推送', on: true },
@@ -8,6 +9,39 @@ const settings = ref([
   { icon: '🧭', label: '推荐报告完成', desc: '辅修推荐报告生成通知', on: false },
   { icon: '📅', label: '课表冲突预警', desc: '新学期排课冲突提醒', on: true },
 ])
+const saving = ref(false)
+const saved = ref(false)
+const error = ref('')
+
+onMounted(async () => {
+  try {
+    const preferences = await fetchPreferences()
+    const notifications = preferences.notifications as Record<string, boolean> | undefined
+    if (notifications) {
+      settings.value.forEach(s => {
+        if (typeof notifications[s.label] === 'boolean') s.on = notifications[s.label]
+      })
+    }
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : '通知偏好加载失败。'
+  }
+})
+
+async function save() {
+  saving.value = true
+  saved.value = false
+  error.value = ''
+  try {
+    const preferences = await fetchPreferences()
+    preferences.notifications = Object.fromEntries(settings.value.map(s => [s.label, s.on]))
+    await savePreferences(preferences)
+    saved.value = true
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : '通知偏好保存失败。'
+  } finally {
+    saving.value = false
+  }
+}
 </script>
 
 <template>
@@ -38,7 +72,9 @@ const settings = ref([
       </div>
     </section>
 
-    <button class="btn-primary">保存风铃偏好</button>
+    <button class="btn-primary" :disabled="saving" @click="save">{{ saving ? '保存中…' : '保存风铃偏好' }}</button>
+    <p v-if="saved" class="status">已保存到当前账号</p>
+    <p v-if="error" class="error">{{ error }}</p>
     <p class="foot">关闭后，对应消息将不再通过风铃通知你 🌿</p>
   </div>
 </template>
@@ -54,4 +90,7 @@ const settings = ref([
 .row-label { font-size: var(--text-base); color: var(--text-primary); }
 .row-desc { margin-top: 2px; font-size: var(--text-xs); color: var(--text-muted); }
 .foot { text-align: center; font-size: var(--text-xs); color: var(--text-muted); }
+.status, .error { text-align: center; font-size: var(--text-sm); }
+.status { color: var(--brand-strong); }
+.error { color: var(--accent-purple); }
 </style>

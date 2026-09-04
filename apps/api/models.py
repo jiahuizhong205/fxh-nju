@@ -52,6 +52,7 @@ class User(Base):
     salt: Mapped[str] = mapped_column(String(32))
     nickname: Mapped[str] = mapped_column(String(50), default="")
     token: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True)
+    preferences: Mapped[dict] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 

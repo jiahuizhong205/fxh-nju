@@ -271,6 +271,39 @@ export async function fetchJob(id: string): Promise<Job> {
   return data.job
 }
 
+export type UserPreferences = Record<string, unknown>
+
+export async function fetchPreferences(): Promise<UserPreferences> {
+  const res = await fetch(`${BASE}/preferences`, { headers: authHeaders() })
+  const data = await jsonResponse<{ preferences: UserPreferences }>(res, '偏好设置加载失败')
+  return data.preferences ?? {}
+}
+
+export async function savePreferences(preferences: UserPreferences): Promise<UserPreferences> {
+  const res = await fetch(`${BASE}/preferences`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify({ preferences }),
+  })
+  const data = await jsonResponse<{ preferences: UserPreferences }>(res, '偏好设置保存失败')
+  return data.preferences ?? {}
+}
+
+const FAVORITE_JOBS_KEY = 'fxh_favorite_jobs'
+
+export function getFavoriteJobIds(): string[] {
+  try {
+    const value = JSON.parse(localStorage.getItem(FAVORITE_JOBS_KEY) || '[]')
+    return Array.isArray(value) ? value.filter((id): id is string => typeof id === 'string') : []
+  } catch {
+    return []
+  }
+}
+
+export function saveFavoriteJobIds(ids: string[]) {
+  localStorage.setItem(FAVORITE_JOBS_KEY, JSON.stringify([...new Set(ids)]))
+}
+
 export interface SearchResult {
   chunk_id: string
   content: string

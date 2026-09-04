@@ -1,16 +1,33 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import Icon from '../components/Icon.vue'
-import { fetchJob, type Job } from '../api/client'
+import { fetchJob, getFavoriteJobIds, saveFavoriteJobIds, type Job } from '../api/client'
 
 const route = useRoute()
 const job = ref<Job | null>(null)
 const favorited = ref(false)
+const error = ref('')
+const today = new Date().toISOString().slice(0, 10)
+const sourceUrl = computed(() => job.value?.source?.startsWith('http') ? job.value.source : '')
+const expired = computed(() => Boolean(job.value?.deadline && job.value.deadline < today))
 
 onMounted(async () => {
-  job.value = await fetchJob(route.params.id as string)
+  try {
+    job.value = await fetchJob(route.params.id as string)
+    favorited.value = getFavoriteJobIds().includes(job.value.id)
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : '岗位详情加载失败，请稍后重试。'
+  }
 })
+
+function toggleFavorite() {
+  if (!job.value) return
+  favorited.value = !favorited.value
+  const ids = getFavoriteJobIds().filter(id => id !== job.value?.id)
+  if (favorited.value) ids.push(job.value.id)
+  saveFavoriteJobIds(ids)
+}
 </script>
 
 <template>
@@ -31,7 +48,7 @@ onMounted(async () => {
             <h3>{{ job.title }}</h3>
             <p class="company">{{ job.employer }}</p>
           </div>
-          <button class="fav" :class="{ on: favorited }" @click="favorited = !favorited">
+          <button class="fav" :class="{ on: favorited }" @click="toggleFavorite">
             <Icon name="bookmark-leaf" :size="22" :color="favorited ? '#5A7A6B' : undefined" />
           </button>
         </div>
@@ -39,7 +56,7 @@ onMounted(async () => {
           <span v-for="m in job.majors" :key="m" class="chip selected">{{ m }}</span>
           <span v-for="c in job.preferred_cross" :key="c" class="chip selected">{{ c }}</span>
         </div>
-        <div class="meta-line">{{ job.location }} · 截止 {{ job.deadline }} · {{ job.source }}</div>
+        <div class="meta-line">{{ job.location }} · {{ expired ? '已截止' : '截止' }} {{ job.deadline }} · {{ job.source }}</div>
       </section>
 
       <section class="card">
@@ -63,11 +80,13 @@ onMounted(async () => {
       </section>
 
       <div class="actions">
-        <button class="btn-ghost" @click="favorited = !favorited">收藏</button>
-        <button class="btn-primary">立即投递</button>
+        <button class="btn-ghost" @click="toggleFavorite">{{ favorited ? '取消收藏' : '收藏' }}</button>
+        <a v-if="sourceUrl && !expired" class="btn-primary apply-link" :href="sourceUrl" target="_blank" rel="noopener">前往投递</a>
+        <button v-else class="btn-primary" disabled>暂无在线投递链接</button>
       </div>
     </template>
 
+    <div v-else-if="error" class="empty">{{ error }}</div>
     <div v-else class="loading">加载中…</div>
   </div>
 </template>
@@ -90,6 +109,9 @@ onMounted(async () => {
 
 .actions { display: flex; gap: var(--space-3); }
 .btn-ghost { flex: 1; padding: var(--space-3); border: 1px solid var(--brand-strong); background: #fff; color: var(--brand-strong); border-radius: var(--radius-md); font-size: var(--text-base); font-weight: var(--weight-semibold); cursor: pointer; font-family: inherit; }
+.apply-link { flex: 1; text-align: center; text-decoration: none; }
+.btn-primary:disabled { opacity: 0.55; cursor: not-allowed; }
+.empty { text-align: center; padding: var(--space-8) 0; color: var(--text-muted); }
 
 .loading { text-align: center; padding: 40px 0; color: var(--text-muted); }
 </style>

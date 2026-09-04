@@ -33,3 +33,7 @@ async def init_db():
                 "CREATE INDEX IF NOT EXISTS ix_conversations_user_id "
                 "ON conversations (user_id)"
             ))
+            await conn.execute(text(
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS "
+                "preferences JSONB NOT NULL DEFAULT '{}'::jsonb"
+            ))
