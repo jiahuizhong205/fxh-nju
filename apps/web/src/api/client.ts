@@ -328,7 +328,7 @@ export interface SearchResult {
 }
 
 export async function searchKnowledge(q: string): Promise<{ query: string; results: SearchResult[]; citations: Citation[] }> {
-  const res = await fetch(`${BASE}/knowledge/search?q=${encodeURIComponent(q)}`)
+  const res = await fetch(`${BASE}/knowledge/search?q=${encodeURIComponent(q)}`, { headers: authHeaders() })
   const data = await res.json()
   if (!res.ok) throw new Error(data.detail || '检索失败')
   return data
@@ -347,7 +347,7 @@ export interface AuthResponse {
   user: AuthUser
 }
 
-function authHeaders(): Record<string, string> {
+export function authHeaders(): Record<string, string> {
   const token = localStorage.getItem('fxh_token')
   return token ? { Authorization: `Bearer ${token}` } : {}
 }

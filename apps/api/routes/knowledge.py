@@ -1,5 +1,6 @@
 """知识库管理 API——文档上传、摄取与版本治理。"""
 
+import io
 from uuid import uuid4, UUID
 
 from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException
@@ -7,8 +8,9 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.api.database import get_db
-from apps.api.models import Document
+from apps.api.models import Document, User
 from apps.api.config import settings
+from apps.api.routes.auth import get_current_user
 from services.rag.ingestion import ingest_document
 from services.rag.retrieval import hybrid_search, build_citations
 
@@ -19,6 +21,24 @@ VALID_SOURCE_TYPES = {"policy", "regulation", "course_catalog", "job_posting", "
 VALID_CONTENT_TYPES = {"text/plain", "text/markdown", "application/pdf"}
 
 
+def _extract_upload_text(content: bytes, content_type: str | None, filename: str | None) -> str:
+    is_pdf = content_type == "application/pdf" or (filename or "").lower().endswith(".pdf")
+    if is_pdf:
+        try:
+            from pypdf import PdfReader
+            reader = PdfReader(io.BytesIO(content))
+            text = "\n\n".join(page.extract_text() or "" for page in reader.pages)
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=f"PDF 解析失败: {exc}") from exc
+        if not text.strip():
+            raise HTTPException(status_code=400, detail="PDF 未提取到可检索文字，可能是扫描件")
+        return text
+    try:
+        return content.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise HTTPException(status_code=400, detail="文本文件必须使用 UTF-8 编码") from exc
+
+
 @router.post("/knowledge/documents")
 async def upload_document(
     file: UploadFile = File(...),
@@ -26,6 +46,7 @@ async def upload_document(
     trust_level: str = Form("A"),
     source_type: str = Form("policy"),
     db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
 ):
     if trust_level not in VALID_TRUST_LEVELS:
         raise HTTPException(status_code=400, detail=f"trust_level 须为 {VALID_TRUST_LEVELS} 之一")
@@ -38,7 +59,7 @@ async def upload_document(
     if file.content_type and file.content_type not in VALID_CONTENT_TYPES:
         raise HTTPException(status_code=400, detail=f"不支持的文件类型: {file.content_type}")
 
-    text = content.decode("utf-8")
+    text = _extract_upload_text(content, file.content_type, file.filename)
     try:
         doc = await ingest_document(
             db, title=title, content=text,
@@ -56,6 +77,7 @@ async def ingest_text(
     trust_level: str = Form("A"),
     source_type: str = Form("policy"),
     db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
 ):
     if trust_level not in VALID_TRUST_LEVELS:
         raise HTTPException(status_code=400, detail=f"trust_level 须为 {VALID_TRUST_LEVELS} 之一")
@@ -79,6 +101,7 @@ async def list_documents(
     trust_level: str | None = None,
     is_active: bool | None = None,
     db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
 ):
     stmt = select(Document).order_by(Document.created_at.desc())
     if trust_level:
@@ -98,7 +121,11 @@ async def list_documents(
 
 
 @router.post("/knowledge/versions/{version}/activate")
-async def activate_version(version: str, db: AsyncSession = Depends(get_db)):
+async def activate_version(
+    version: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
     await db.execute(update(Document).values(is_active=False))
     result = await db.execute(
         update(Document)
@@ -112,7 +139,11 @@ async def activate_version(version: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.delete("/knowledge/documents/{doc_id}")
-async def delete_document(doc_id: UUID, db: AsyncSession = Depends(get_db)):
+async def delete_document(
+    doc_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
     doc = await db.get(Document, doc_id)
     if not doc:
         raise HTTPException(status_code=404, detail="文档不存在")
@@ -122,7 +153,12 @@ async def delete_document(doc_id: UUID, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/knowledge/search")
-async def search_knowledge(q: str, top_k: int | None = None, db: AsyncSession = Depends(get_db)):
+async def search_knowledge(
+    q: str,
+    top_k: int | None = None,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
     if not q.strip():
         raise HTTPException(status_code=400, detail="查询不能为空")
     try:
