@@ -98,7 +98,7 @@ async function save() {
 
     <section class="card avatar-row">
       <img class="avatar" src="/illustrations/avatar-wreath.png" alt="头像" />
-      <button class="btn-avatar">点击更换园丁头像</button>
+      <router-link to="/interest-selection" class="btn-avatar">快速完善兴趣画像</router-link>
     </section>
 
     <section class="card">

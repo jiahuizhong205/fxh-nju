@@ -5,20 +5,41 @@ import { fetchPrograms, fetchPlan, type Program, type PlanResult, type PlanItem 
 const programs = ref<Program[]>([])
 const program = ref('')
 const plan = ref<PlanResult | null>(null)
+const loading = ref(false)
+const error = ref('')
 
 const CN_NUM = ['零', '一', '二', '三', '四', '五', '六', '七', '八']
 
 onMounted(async () => {
-  programs.value = await fetchPrograms()
-  if (programs.value.length) {
-    program.value = programs.value[0].name
-    await loadPlan()
+  loading.value = true
+  try {
+    programs.value = await fetchPrograms()
+    const firstAvailable = programs.value.find(p => p.has_plan !== false)
+    if (firstAvailable) {
+      program.value = firstAvailable.name
+      await loadPlan()
+    } else {
+      error.value = '当前没有可展示的结构化培养方案。'
+    }
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : '培养方案加载失败，请稍后重试。'
+  } finally {
+    loading.value = false
   }
 })
 
 async function loadPlan() {
   if (!program.value) return
-  plan.value = await fetchPlan(program.value)
+  loading.value = true
+  error.value = ''
+  plan.value = null
+  try {
+    plan.value = await fetchPlan(program.value)
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : '培养方案加载失败，请稍后重试。'
+  } finally {
+    loading.value = false
+  }
 }
 
 function termLabel(it: PlanItem): string {
@@ -36,10 +57,14 @@ function termLabel(it: PlanItem): string {
     <section class="card picker">
       <label class="picker-label">选择辅修专业</label>
       <select v-model="program" @change="loadPlan">
-        <option v-for="p in programs" :key="p.name" :value="p.name">{{ p.name }}</option>
+        <option v-for="p in programs" :key="p.name" :value="p.name" :disabled="p.has_plan === false">
+          {{ p.name }}{{ p.has_plan === false ? '（暂无培养方案）' : '' }}
+        </option>
       </select>
     </section>
 
+    <div v-if="loading" class="empty">正在加载培养方案…</div>
+    <div v-else-if="error" class="card empty">{{ error }}</div>
     <template v-if="plan">
       <section class="course-list">
         <div v-for="it in plan.items" :key="it.course" class="course-card">

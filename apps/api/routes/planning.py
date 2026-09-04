@@ -9,9 +9,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.api.database import get_db
-from apps.api.models import StudentProfile, Program, ProgramPlanItem, Course, Job
+from apps.api.models import StudentProfile, Program, ProgramPlanItem, Course, Job, User
+from apps.api.routes.auth import get_current_user
 from services.planning.recommendation_engine import recommend
-from services.planning.course_planner import generate_plan
+from services.planning.course_planner import generate_plan, PROGRAM_PLANS
 from services.planning.career_engine import match_jobs
 
 router = APIRouter()
@@ -21,9 +22,12 @@ class RecommendRequest(BaseModel):
     profile: dict | None = None  # 缺省时读取最新画像
 
 
-async def _latest_profile(db: AsyncSession) -> dict | None:
+async def _latest_profile(db: AsyncSession, user_id) -> dict | None:
     result = await db.execute(
-        select(StudentProfile).order_by(StudentProfile.updated_at.desc()).limit(1)
+        select(StudentProfile)
+        .where(StudentProfile.user_id == user_id)
+        .order_by(StudentProfile.updated_at.desc())
+        .limit(1)
     )
     p = result.scalar_one_or_none()
     if not p:
@@ -43,11 +47,17 @@ async def _latest_profile(db: AsyncSession) -> dict | None:
 async def _load_programs(db: AsyncSession) -> list[dict]:
     result = await db.execute(select(Program))
     progs = result.scalars().all()
+    plan_names = set((await db.execute(select(ProgramPlanItem.program_name).distinct())).scalars())
+    # Keep the currently supported built-in templates discoverable until the
+    # corresponding database plan rows are imported. DB rows still take
+    # precedence when present and are never overwritten here.
+    plan_names.update(PROGRAM_PLANS.keys())
     return [{
         "name": p.name, "total_credits": p.total_credits, "campus": p.campus,
         "subject_rank": p.subject_rank, "core_courses": p.core_courses or [],
         "required_math": p.required_math, "required_math_level": p.required_math_level,
         "semesters_needed": p.semesters_needed, "discipline": p.discipline,
+        "has_plan": p.name in plan_names,
     } for p in progs]
 
 
@@ -83,17 +93,28 @@ async def list_programs(db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/recommend")
-async def recommend_programs(req: RecommendRequest, db: AsyncSession = Depends(get_db)):
-    profile = req.profile or await _latest_profile(db)
+async def recommend_programs(
+    req: RecommendRequest,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    profile = req.profile or await _latest_profile(db, user.id)
     if not profile:
         raise HTTPException(status_code=400, detail="尚未填写学生画像")
-    return {"recommendations": recommend(profile, await _load_programs(db))}
+    programs = [p for p in await _load_programs(db) if p["has_plan"]]
+    return {"recommendations": recommend(profile, programs)}
 
 
 @router.get("/programs/plan")
-async def course_plan(program: str, db: AsyncSession = Depends(get_db)):
-    profile = await _latest_profile(db) or {}
-    result = generate_plan(program, profile, await _load_plans(db))
+async def course_plan(
+    program: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    profile = await _latest_profile(db, user.id) or {}
+    db_plans = await _load_plans(db)
+    plans = {**PROGRAM_PLANS, **db_plans}
+    result = generate_plan(program, profile, plans)
     if not result.items:
         raise HTTPException(status_code=404, detail=f"未找到「{program}」的培养方案")
     return {

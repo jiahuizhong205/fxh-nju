@@ -5,6 +5,11 @@ import { fetchProfile, updateProfile } from '../api/client'
 
 const router = useRouter()
 
+function goBack() {
+  if (window.history.length > 1) router.back()
+  else router.push('/course-planning')
+}
+
 const moods = ref([
   { name: '晨光', icon: '🌅', active: false },
   { name: '黄金档', icon: '☀️', active: false },
@@ -58,7 +63,7 @@ async function save() {
 <template>
   <div class="page">
     <header class="page-head">
-      <router-link to="/course-planning" class="back">
+      <router-link to="/course-planning" class="back" @click.prevent="goBack">
         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="m15 18-6-6 6-6"/>
         </svg>

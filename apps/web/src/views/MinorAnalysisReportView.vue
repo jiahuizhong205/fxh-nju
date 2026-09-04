@@ -5,6 +5,7 @@ import { fetchProfile, recommendPrograms, fetchPlan, type Recommendation, type P
 const rec = ref<Recommendation | null>(null)
 const plan = ref<PlanResult | null>(null)
 const hasProfile = ref(false)
+const error = ref('')
 
 const scoreKeys = ['interest_fit', 'career_fit', 'prerequisite_readiness', 'schedule_feasibility', 'campus_feasibility']
 const scoreLabel: Record<string, string> = {
@@ -14,13 +15,24 @@ const scoreLabel: Record<string, string> = {
 const CN_NUM = ['零', '一', '二', '三', '四', '五', '六', '七', '八']
 
 onMounted(async () => {
-  const p = await fetchProfile()
-  hasProfile.value = !!p
-  if (!p) return
-  const recs = await recommendPrograms()
-  if (!recs.length) return
-  rec.value = recs[0]
-  plan.value = await fetchPlan(recs[0].program.name)
+  try {
+    const p = await fetchProfile()
+    hasProfile.value = !!p
+    if (!p) return
+    const recs = await recommendPrograms()
+    if (!recs.length) {
+      error.value = '暂时没有可生成报告的推荐结果。'
+      return
+    }
+    rec.value = recs[0]
+    try {
+      plan.value = await fetchPlan(recs[0].program.name)
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : '该专业暂未录入结构化培养方案。'
+    }
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : '报告加载失败，请稍后重试。'
+  }
 })
 
 function termLabel(it: PlanItem): string {
@@ -83,6 +95,10 @@ function termLabel(it: PlanItem): string {
         </div>
       </section>
 
+      <section v-if="error" class="card empty">
+        <p>{{ error }}</p>
+      </section>
+
       <template v-if="plan">
         <section class="card">
           <h4 class="card-title">培养方案（{{ plan.items.length }} 门课）</h4>
@@ -109,6 +125,7 @@ function termLabel(it: PlanItem): string {
       <router-link to="/course-planning" class="btn-primary cta">查看完整课程规划</router-link>
     </template>
 
+    <div v-else-if="error" class="card empty"><p>{{ error }}</p></div>
     <div v-else class="loading">生成报告中…</div>
   </div>
 </template>

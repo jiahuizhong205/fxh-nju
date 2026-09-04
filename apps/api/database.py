@@ -1,5 +1,6 @@
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy import text
 from pgvector.sqlalchemy import Vector
 
 from apps.api.config import settings
@@ -20,3 +21,15 @@ async def get_db() -> AsyncSession:
 async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # create_all does not alter an already initialized database. Keep this
+        # small compatibility migration here so existing Docker volumes get
+        # the ownership column without losing any conversation data.
+        if conn.dialect.name == "postgresql":
+            await conn.execute(text(
+                "ALTER TABLE conversations ADD COLUMN IF NOT EXISTS "
+                "user_id UUID REFERENCES users(id) ON DELETE CASCADE"
+            ))
+            await conn.execute(text(
+                "CREATE INDEX IF NOT EXISTS ix_conversations_user_id "
+                "ON conversations (user_id)"
+            ))

@@ -6,12 +6,13 @@ from uuid import uuid4, UUID
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, update
 from langchain_core.messages import HumanMessage
 
 from apps.api.database import get_db
 from apps.api.config import settings
-from apps.api.models import Conversation, Message
+from apps.api.models import Conversation, Message, User, utcnow
+from apps.api.routes.auth import get_current_user
 from packages.contracts.schemas import ChatRequest, AssistantAnswer
 from services.agent_runtime.state import AssistantState
 from services.agent_runtime.graph import RootGraph
@@ -86,6 +87,11 @@ async def _stream_answer(db: AsyncSession, thread_id: UUID, query: str, conversa
         citations=citations,
     )
     db.add(msg)
+    await db.execute(
+        update(Conversation)
+        .where(Conversation.id == conversation_id)
+        .values(updated_at=utcnow())
+    )
     await db.commit()
 
     # final
@@ -99,7 +105,11 @@ async def _stream_answer(db: AsyncSession, thread_id: UUID, query: str, conversa
 
 
 @router.post("/chat")
-async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
+async def chat(
+    request: ChatRequest,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
     """发送消息，返回 SSE 流。"""
     if not request.message.strip():
         raise HTTPException(status_code=400, detail="消息不能为空")
@@ -108,12 +118,18 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
 
     # 创建或获取会话
     if request.thread_id:
-        conv = await db.get(Conversation, request.thread_id)
+        result = await db.execute(
+            select(Conversation).where(
+                Conversation.id == request.thread_id,
+                Conversation.user_id == user.id,
+            )
+        )
+        conv = result.scalar_one_or_none()
         if not conv:
             raise HTTPException(status_code=404, detail="会话不存在")
         conversation_id = request.thread_id
     else:
-        conv = Conversation(title=request.message[:30])
+        conv = Conversation(title=request.message[:30], user_id=user.id)
         db.add(conv)
         await db.flush()
         conversation_id = conv.id
@@ -137,18 +153,36 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/conversations")
-async def list_conversations(db: AsyncSession = Depends(get_db)):
+async def list_conversations(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
     """获取会话列表。"""
     result = await db.execute(
-        select(Conversation).order_by(Conversation.updated_at.desc()).limit(50)
+        select(Conversation)
+        .where(Conversation.user_id == user.id)
+        .order_by(Conversation.updated_at.desc())
+        .limit(50)
     )
     convs = result.scalars().all()
     return [{"id": str(c.id), "title": c.title, "created_at": c.created_at.isoformat()} for c in convs]
 
 
 @router.get("/conversations/{conv_id}/messages")
-async def get_messages(conv_id: UUID, db: AsyncSession = Depends(get_db)):
+async def get_messages(
+    conv_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
     """获取会话消息历史。"""
+    conversation = await db.execute(
+        select(Conversation).where(
+            Conversation.id == conv_id,
+            Conversation.user_id == user.id,
+        )
+    )
+    if not conversation.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="会话不存在")
     result = await db.execute(
         select(Message)
         .where(Message.conversation_id == conv_id)

@@ -11,7 +11,7 @@ const tabs = [
 ]
 
 function isActive(path: string) {
-  return route.path === path
+  return path === '/' ? route.path === '/' : route.path.startsWith(path)
 }
 </script>
 

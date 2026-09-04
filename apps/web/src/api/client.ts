@@ -23,14 +23,22 @@ export interface Conversation {
   created_at: string
 }
 
+async function jsonResponse<T>(res: Response, fallback = '请求失败'): Promise<T> {
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) {
+    throw new Error(data.detail || data.message || fallback)
+  }
+  return data as T
+}
+
 export async function fetchConversations(): Promise<Conversation[]> {
-  const res = await fetch(`${BASE}/conversations`)
-  return res.json()
+  const res = await fetch(`${BASE}/conversations`, { headers: authHeaders() })
+  return jsonResponse<Conversation[]>(res, '会话列表加载失败')
 }
 
 export async function fetchMessages(convId: string): Promise<ChatMessage[]> {
-  const res = await fetch(`${BASE}/conversations/${convId}/messages`)
-  return res.json()
+  const res = await fetch(`${BASE}/conversations/${convId}/messages`, { headers: authHeaders() })
+  return jsonResponse<ChatMessage[]>(res, '消息记录加载失败')
 }
 
 export function sendMessage(
@@ -46,18 +54,27 @@ export function sendMessage(
 
   fetch(`${BASE}/chat`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
     body: JSON.stringify({ message, thread_id: threadId }),
     signal: controller.signal,
   }).then(async (res) => {
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      onError(data.detail || data.message || '消息发送失败')
+      return
+    }
     const convId = res.headers.get('X-Conversation-Id')
     const reader = res.body?.getReader()
-    if (!reader) return
+    if (!reader) {
+      onError('服务器未返回有效响应')
+      return
+    }
 
     const decoder = new TextDecoder()
     let buffer = ''
 
     let currentEvent = ''
+    let receivedFinal = false
 
     while (true) {
       const { done, value } = await reader.read()
@@ -83,6 +100,7 @@ export function sendMessage(
             } else if (ev === 'citation') {
               onCitation(data as Citation)
             } else if (ev === 'final') {
+              receivedFinal = true
               onFinal({ ...data, conversation_id: convId })
             } else if (ev === 'error') {
               onError(data.message)
@@ -91,6 +109,7 @@ export function sendMessage(
         }
       }
     }
+    if (!receivedFinal) onError('服务器提前结束了响应，请重试')
   }).catch(err => {
     if (err.name !== 'AbortError') {
       onError(err.message)
@@ -143,6 +162,7 @@ export interface Program {
   required_math_level: string
   semesters_needed: number
   discipline: string
+  has_plan?: boolean
 }
 
 export interface Recommendation {
@@ -184,7 +204,8 @@ export interface Job {
 
 export async function fetchProfile(): Promise<StudentProfile | null> {
   const res = await fetch(`${BASE}/profile`, { headers: authHeaders() })
-  const data = await res.json()
+  if (res.status === 401) return null
+  const data = await jsonResponse<{ profile?: StudentProfile }>(res, '学生画像加载失败')
   return data.profile ?? null
 }
 
@@ -194,7 +215,7 @@ export async function saveProfile(input: ProfileInput): Promise<StudentProfile> 
     headers: { 'Content-Type': 'application/json', ...authHeaders() },
     body: JSON.stringify(input),
   })
-  const data = await res.json()
+  const data = await jsonResponse<{ profile: StudentProfile }>(res, '学生画像保存失败')
   return data.profile
 }
 
@@ -218,35 +239,35 @@ export async function updateProfile(partial: Partial<ProfileInput>): Promise<Stu
 
 export async function fetchPrograms(): Promise<Program[]> {
   const res = await fetch(`${BASE}/programs`)
-  const data = await res.json()
+  const data = await jsonResponse<{ programs: Program[] }>(res, '专业目录加载失败')
   return data.programs
 }
 
 export async function recommendPrograms(profile?: ProfileInput): Promise<Recommendation[]> {
   const res = await fetch(`${BASE}/recommend`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
     body: JSON.stringify(profile ? { profile } : {}),
   })
-  const data = await res.json()
+  const data = await jsonResponse<{ recommendations: Recommendation[] }>(res, '推荐生成失败')
   return data.recommendations
 }
 
 export async function fetchPlan(program: string): Promise<PlanResult> {
-  const res = await fetch(`${BASE}/programs/plan?program=${encodeURIComponent(program)}`)
-  const data = await res.json()
+  const res = await fetch(`${BASE}/programs/plan?program=${encodeURIComponent(program)}`, { headers: authHeaders() })
+  const data = await jsonResponse<PlanResult>(res, '培养方案加载失败')
   return data
 }
 
 export async function fetchJobs(): Promise<Job[]> {
   const res = await fetch(`${BASE}/jobs`)
-  const data = await res.json()
+  const data = await jsonResponse<{ jobs: Job[] }>(res, '岗位列表加载失败')
   return data.jobs
 }
 
 export async function fetchJob(id: string): Promise<Job> {
   const res = await fetch(`${BASE}/jobs/${id}`)
-  const data = await res.json()
+  const data = await jsonResponse<{ job: Job }>(res, '岗位详情加载失败')
   return data.job
 }
 

@@ -1,12 +1,18 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import Icon from '../components/Icon.vue'
 import { fetchProfile, recommendPrograms, type StudentProfile, type Recommendation } from '../api/client'
 import { useAuthStore } from '../stores/auth'
 
 const auth = useAuthStore()
+const router = useRouter()
 const profile = ref<StudentProfile | null>(null)
-const rec = ref<Recommendation | null>(null)
+const recommendations = ref<Recommendation[]>([])
+const recIndex = ref(0)
+const error = ref('')
+
+const rec = computed(() => recommendations.value[recIndex.value] ?? null)
 
 const displayName = computed(() => auth.user?.nickname || auth.user?.username || '同学')
 
@@ -18,11 +24,29 @@ const entries = [
   { to: '/career', label: '职业探索', icon: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/><path d="m8.5 11 1.5 1.5 3-3"/>' },
 ]
 
+async function loadRecommendations() {
+  try {
+    recommendations.value = await recommendPrograms()
+    recIndex.value = 0
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : '推荐加载失败，请稍后重试。'
+  }
+}
+
+function refreshRecommendation() {
+  if (recommendations.value.length > 1) {
+    recIndex.value = (recIndex.value + 1) % recommendations.value.length
+  } else {
+    void loadRecommendations()
+  }
+}
+
 onMounted(async () => {
-  profile.value = await fetchProfile()
-  if (profile.value) {
-    const recs = await recommendPrograms()
-    rec.value = recs[0] ?? null
+  try {
+    profile.value = await fetchProfile()
+    if (profile.value) await loadRecommendations()
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : '首页数据加载失败，请稍后重试。'
   }
 })
 </script>
@@ -35,7 +59,7 @@ onMounted(async () => {
         <div class="hero-id">
           <div class="hero-name">{{ displayName }} <span class="star">⭐</span></div>
         </div>
-        <button class="bell" aria-label="通知">
+        <button class="bell" aria-label="通知" @click="router.push('/settings/notification')">
           <Icon name="bell" :size="20" />
         </button>
       </div>
@@ -54,7 +78,7 @@ onMounted(async () => {
 
     <section class="rec-head">
       <h3>为你推荐 🍀</h3>
-      <button class="refresh">换一批</button>
+      <button class="refresh" @click="refreshRecommendation">换一批</button>
     </section>
 
     <section class="recommend-card" @click="$router.push('/recommend')">
@@ -68,6 +92,7 @@ onMounted(async () => {
         <span class="rec-go">去瞧瞧 →</span>
       </div>
     </section>
+    <p v-if="error" class="error-msg">{{ error }}</p>
   </div>
 </template>
 
@@ -125,4 +150,5 @@ onMounted(async () => {
 .rec-foot { display: flex; justify-content: space-between; align-items: center; }
 .rec-count { font-size: var(--text-xs); opacity: 0.8; }
 .rec-go { font-size: var(--text-sm); font-weight: var(--weight-semibold); }
+.error-msg { color: var(--accent-purple); font-size: var(--text-sm); }
 </style>

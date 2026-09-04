@@ -5,6 +5,7 @@ import { fetchProfile, recommendPrograms, type Recommendation } from '../api/cli
 const recommendations = ref<Recommendation[]>([])
 const loading = ref(false)
 const hasProfile = ref(false)
+const error = ref('')
 
 const scoreKeys = ['interest_fit', 'career_fit', 'prerequisite_readiness', 'schedule_feasibility', 'campus_feasibility']
 const scoreLabel: Record<string, string> = {
@@ -13,14 +14,22 @@ const scoreLabel: Record<string, string> = {
 }
 
 onMounted(async () => {
-  const p = await fetchProfile()
-  hasProfile.value = !!p
+  try {
+    const p = await fetchProfile()
+    hasProfile.value = !!p
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : '画像加载失败，请稍后重试。'
+  }
 })
 
 async function getRecommendation() {
   loading.value = true
+  error.value = ''
   try {
     recommendations.value = await recommendPrograms()
+    if (!recommendations.value.length) error.value = '当前没有可用的推荐结果。'
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : '推荐生成失败，请稍后重试。'
   } finally {
     loading.value = false
   }
@@ -41,6 +50,7 @@ async function getRecommendation() {
         <button class="btn-recommend" :disabled="loading" @click="getRecommendation">
           {{ loading ? '正在生成推荐...' : '生成辅修推荐' }}
         </button>
+        <p v-if="error" class="error-msg">{{ error }}</p>
 
         <div v-if="recommendations.length" class="rec-list">
           <div v-for="(r, i) in recommendations" :key="r.program.name" class="rec-card">
@@ -61,6 +71,7 @@ async function getRecommendation() {
             <p v-if="r.risks.length" class="rec-risks">⚠ {{ r.risks.join('；') }}</p>
           </div>
         </div>
+        <router-link v-if="recommendations.length" to="/minor-report" class="report-link">查看首个推荐的详细分析报告 →</router-link>
       </div>
     </div>
   </div>
@@ -102,4 +113,6 @@ h2 { font-size: 1.3rem; margin-bottom: 16px; }
 
 .rec-courses { margin-top: 12px; font-size: 0.85rem; color: #6b7280; }
 .rec-risks { margin-top: 8px; font-size: 0.85rem; color: #b45309; }
+.error-msg { margin-top: 12px; color: #b45309; font-size: 0.9rem; }
+.report-link { display: inline-block; margin-top: 16px; color: #5a7a6b; font-size: 0.9rem; text-decoration: none; }
 </style>
