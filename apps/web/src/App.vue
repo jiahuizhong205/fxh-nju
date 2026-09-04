@@ -75,8 +75,8 @@ body {
   box-shadow: none;
 }
 
-.app-header {
-  display: flex;
+.app.app .app-header {
+  display: flex !important;
   align-items: baseline;
   gap: 8px;
   padding: 14px 16px;
@@ -100,9 +100,9 @@ body {
   overflow-y: auto;
 }
 
-.tab-bar {
+.app.app .tab-bar {
   flex-shrink: 0;
-  display: flex;
+  display: flex !important;
   background: var(--bg-surface);
   border-top: 1px solid var(--border);
 }
