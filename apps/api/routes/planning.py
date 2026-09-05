@@ -465,6 +465,18 @@ def _saved_plan_dict(plan: LearningPlan) -> dict:
     }
 
 
+def _apply_generated_plan(plan: LearningPlan, result, profile_version: int) -> None:
+    """将当前画像重新生成的结果写回计划，并清除过期的排课分析。"""
+    plan.program_name = result.program_name
+    plan.profile_version = profile_version
+    plan.items = [_plan_item(item) for item in result.items]
+    plan.alternatives = [[_plan_item(item) for item in alternative] for alternative in result.alternatives]
+    plan.warnings = result.warnings
+    plan.infeasible = result.infeasible
+    plan.schedule_analysis = {}
+    plan.updated_at = utcnow()
+
+
 def _plan_csv(plan: LearningPlan) -> str:
     output = io.StringIO(newline="")
     writer = csv.writer(output, lineterminator="\n")
@@ -583,6 +595,33 @@ async def update_saved_plan(
     await db.commit()
     await db.refresh(plan)
     return {"plan": _saved_plan_dict(plan)}
+
+
+@router.post("/programs/plans/{plan_id}/recalculate")
+async def recalculate_saved_plan(
+    plan_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """按当前画像重新生成保存的计划，并使旧排课分析失效。"""
+    result = await db.execute(
+        select(LearningPlan).where(LearningPlan.id == plan_id, LearningPlan.user_id == user.id)
+    )
+    plan = result.scalar_one_or_none()
+    if not plan:
+        raise HTTPException(status_code=404, detail="课程规划不存在")
+
+    profile = await _latest_profile(db, user.id) or {}
+    db_plans = await _load_plans(db)
+    plans = {**PROGRAM_PLANS, **db_plans}
+    generated = generate_plan(plan.program_name, profile, plans)
+    if not generated.items:
+        raise HTTPException(status_code=404, detail=f"未找到「{plan.program_name}」的培养方案")
+
+    _apply_generated_plan(plan, generated, profile.get("version", 0))
+    await db.commit()
+    await db.refresh(plan)
+    return {"plan": _saved_plan_dict(plan), "recalculated": True}
 
 
 @router.post("/programs/plans/{plan_id}/schedule-preview")

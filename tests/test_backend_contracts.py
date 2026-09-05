@@ -9,6 +9,7 @@ import unittest
 import uuid
 from datetime import date, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 
 from fastapi import HTTPException
 from pydantic import ValidationError
@@ -578,6 +579,28 @@ class BackendContractTests(unittest.TestCase):
         self.assertEqual(payload.teaching_class_ids, ["TC-001", "TC-002"])
         plan = LearningPlan(program_name="新闻学", schedule_analysis={"feasible": False})
         self.assertFalse(planning._saved_plan_dict(plan)["schedule_analysis"]["feasible"])
+
+    def test_recalculate_saved_plan_refreshes_profile_and_clears_stale_analysis(self):
+        plan = LearningPlan(
+            program_name="新闻学",
+            profile_version=2,
+            items=[{"course": "旧课程", "credits": 3}],
+            schedule_analysis={"feasible": False},
+        )
+        generated = SimpleNamespace(
+            program_name="新闻学",
+            items=[SimpleNamespace(semester=2, term="秋季", year=1, course="新课程", credits=3, campus="仙林校区")],
+            alternatives=[],
+            warnings=["请关注校区通勤"],
+            infeasible=False,
+        )
+
+        planning._apply_generated_plan(plan, generated, profile_version=3)
+
+        self.assertEqual(plan.profile_version, 3)
+        self.assertEqual(plan.items[0]["course"], "新课程")
+        self.assertEqual(plan.warnings, ["请关注校区通勤"])
+        self.assertEqual(plan.schedule_analysis, {})
 
     def test_career_outcomes_are_explained_by_jobs_and_skill_paths(self):
         outcomes = build_career_outcomes(
