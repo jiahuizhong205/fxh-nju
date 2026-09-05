@@ -23,7 +23,7 @@ from apps.api.routes import profile
 from apps.api.routes import sync
 from apps.api.routes import notifications
 from packages.contracts.schemas import ChatRequest
-from services.planning.recommendation_engine import hard_filter
+from services.planning.recommendation_engine import hard_filter, recommend
 from services.planning.schedule_conflicts import detect_schedule_conflicts
 
 
@@ -598,6 +598,33 @@ class BackendContractTests(unittest.TestCase):
         )
         self.assertEqual(len(overlap["conflicts"]), 1)
         self.assertFalse(overlap["feasible"])
+
+    def test_recommendation_contains_explainable_rule_reasons(self):
+        result = recommend(
+            {
+                "major": "新闻学",
+                "grade": "大二",
+                "campus": "仙林校区",
+                "interests": ["数据分析"],
+                "career_goals": "数据新闻",
+                "math_willingness": True,
+                "campus_flexibility": True,
+                "credit_budget": 50,
+            },
+            [{
+                "name": "新闻学",
+                "total_credits": 45,
+                "campus": "仙林校区",
+                "subject_rank": "A",
+                "core_courses": ["数据新闻"],
+                "required_math": False,
+                "required_math_level": "",
+                "semesters_needed": 4,
+                "discipline": "文学",
+            }],
+        )
+        self.assertTrue(result)
+        self.assertTrue(result[0]["explanation"])
 
 
 if __name__ == "__main__":

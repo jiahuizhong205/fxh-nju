@@ -199,6 +199,23 @@ def score_program(program: dict, profile: dict) -> ScoreResult:
     )
 
 
+def _build_explanation(program: dict, profile: dict, scores: dict, filter_reasons: list[str]) -> list[str]:
+    """把评分规则转换成可展示、可追溯的解释。"""
+    explanations = []
+    if scores.get("interest_fit", 0) >= 0.7:
+        explanations.append("与你填写的兴趣方向匹配")
+    elif scores.get("interest_fit", 0) <= 0.3:
+        explanations.append("当前兴趣方向与该专业匹配较弱")
+    if scores.get("career_fit", 0) >= 0.7:
+        explanations.append("与你填写的职业目标匹配")
+    if profile.get("completed_courses") and scores.get("prerequisite_readiness", 0) >= 0.8:
+        explanations.append("已修课程为部分先修判断提供支持")
+    if scores.get("campus_feasibility", 0) >= 0.8:
+        explanations.append("校区安排与当前偏好较适配")
+    explanations.extend(f"注意：{reason}" for reason in filter_reasons)
+    return explanations or ["根据当前画像的综合评分生成"]
+
+
 def recommend(profile: dict, programs: list[dict] | None = None) -> list[dict]:
     """执行硬过滤 + 评分排序，返回 Top-N 推荐。"""
     programs = programs or PROGRAMS
@@ -213,6 +230,7 @@ def recommend(profile: dict, programs: list[dict] | None = None) -> list[dict]:
             "scores": scored.scores,
             "total_score": scored.total,
             "risks": scored.risk_items + [r for r in filt.reasons if "建议" in r],
+            "explanation": _build_explanation(prog, profile, scored.scores, filt.reasons),
         })
 
     results.sort(key=lambda x: x["total_score"], reverse=True)
