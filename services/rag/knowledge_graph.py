@@ -116,6 +116,19 @@ NEWS_GRAPH: dict[str, list] = {
 }
 
 
+KNOWLEDGE_RESOURCES: dict[str, list[dict]] = {
+    node.id: [{
+        "resource_id": f"{node.id}-overview",
+        "resource_type": "knowledge_note",
+        "title": f"{node.name}·学习要点",
+        "description": f"围绕{node.name}整理的福小禾学习提示，可从概念、案例和练习三个角度展开。",
+        "source": "福小禾知识库",
+    }]
+    for node in NEWS_GRAPH["nodes"]
+    if node.label == "KnowledgePoint"
+}
+
+
 def get_knowledge_tree(course_names: list[str]) -> dict:
     """根据课程名生成知识树——BFS 从课程展开知识点+先修链。"""
     courses = [n for n in NEWS_GRAPH["nodes"]
@@ -158,14 +171,13 @@ def get_knowledge_tree(course_names: list[str]) -> dict:
 
 def get_skill_pathways(program_name: str) -> list[dict]:
     """从辅修专业出发，查询 课程→知识→技能→职业 映射链。"""
-    program_courses = [n for n in NEWS_GRAPH["nodes"]
-                       if n.label == "Course"]  # 简化：全量课程
-
-    course_ids = {c.id for c in program_courses}
+    # 当前种子图只有新闻学，映射关系实际从 KnowledgePoint 指向 Skill，
+    # 不能用课程节点作为 MAPS_TO_SKILL 的来源。
+    knowledge_point_ids = {n.id for n in NEWS_GRAPH["nodes"] if n.label == "KnowledgePoint"}
     # 收集技能
     skill_map: dict[str, dict] = {}
     for e in NEWS_GRAPH["edges"]:
-        if e.relation == "MAPS_TO_SKILL" and e.source_id in course_ids:
+        if e.relation == "MAPS_TO_SKILL" and e.source_id in knowledge_point_ids:
             skill = next((n for n in NEWS_GRAPH["nodes"] if n.id == e.target_id), None)
             if skill:
                 kp = next((n for n in NEWS_GRAPH["nodes"] if n.id == e.source_id), None)
@@ -188,6 +200,33 @@ def get_skill_pathways(program_name: str) -> list[dict]:
                     skill_map[e.source_id]["careers"].append(career.name)
 
     return list(skill_map.values())
+
+
+def get_node_resources(node_id: str) -> list[dict]:
+    """返回知识点关联的可展示资源元数据。"""
+    known = next(
+        (node for node in NEWS_GRAPH["nodes"]
+         if node.id == node_id and node.label == "KnowledgePoint"),
+        None,
+    )
+    if not known:
+        return []
+    return KNOWLEDGE_RESOURCES.get(node_id, [])
+
+
+def get_learning_pathways(program_name: str, mode: str = "campus") -> list[dict]:
+    """按在校辅修/独立自学模式补充路径执行提示。"""
+    pathways = get_skill_pathways(program_name)
+    mode_label = "在校辅修" if mode == "campus" else "独立自学"
+    for pathway in pathways:
+        pathway["mode"] = mode
+        pathway["mode_label"] = mode_label
+        pathway["next_step"] = (
+            "优先安排对应培养方案课程，再用知识点资源巩固"
+            if mode == "campus" else
+            "先完成知识点资源学习，再根据能力选择课程或项目练习"
+        )
+    return pathways
 
 
 def get_prerequisites(node_id: str) -> list[str]:

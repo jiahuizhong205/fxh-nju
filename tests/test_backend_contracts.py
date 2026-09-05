@@ -26,6 +26,7 @@ from packages.contracts.schemas import ChatRequest
 from services.planning.recommendation_engine import hard_filter, recommend
 from services.planning.eligibility import evaluate_program_eligibility
 from services.planning.schedule_conflicts import detect_schedule_conflicts
+from services.rag.knowledge_graph import get_learning_pathways, get_node_resources, get_skill_pathways
 
 
 class _CommitOnlyDb:
@@ -460,6 +461,21 @@ class BackendContractTests(unittest.TestCase):
         self.assertEqual(payload.progress_percent, 100)
         with self.assertRaises(ValidationError):
             knowledge.KnowledgeProgressUpdate(status="done", progress_percent=101)
+
+    def test_knowledge_pathways_use_knowledge_points_for_skill_mapping(self):
+        pathways = get_skill_pathways("新闻学")
+        self.assertTrue(pathways)
+        self.assertTrue(any(pathway["careers"] for pathway in pathways))
+        self.assertIn("记者/编辑", {career for pathway in pathways for career in pathway["careers"]})
+
+    def test_knowledge_resources_and_pathway_modes_are_available(self):
+        resources = get_node_resources("k003")
+        self.assertTrue(resources)
+        self.assertEqual(resources[0]["resource_type"], "knowledge_note")
+        self.assertEqual(get_node_resources("missing"), [])
+        pathways = get_learning_pathways("新闻学", "self_study")
+        self.assertTrue(pathways)
+        self.assertTrue(all(pathway["mode"] == "self_study" for pathway in pathways))
 
     def test_profile_schedule_schema_accepts_supported_preferences_only(self):
         payload = profile.ProfileUpdate(

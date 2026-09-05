@@ -16,7 +16,7 @@ from apps.api.config import settings
 from apps.api.routes.auth import get_current_user
 from services.rag.ingestion import ingest_document
 from services.rag.retrieval import hybrid_search, build_citations
-from services.rag.knowledge_graph import NEWS_GRAPH, get_knowledge_tree, get_skill_pathways
+from services.rag.knowledge_graph import NEWS_GRAPH, get_knowledge_tree, get_node_resources, get_learning_pathways
 
 router = APIRouter()
 
@@ -28,6 +28,10 @@ VALID_CONTENT_TYPES = {"text/plain", "text/markdown", "application/pdf"}
 class KnowledgeProgressUpdate(BaseModel):
     status: Literal["todo", "progress", "done", "mastered"]
     progress_percent: int = Field(ge=0, le=100)
+
+
+class KnowledgePathwayModeUpdate(BaseModel):
+    mode: Literal["campus", "self_study"]
 
 
 def _extract_upload_text(content: bytes, content_type: str | None, filename: str | None) -> str:
@@ -160,9 +164,35 @@ async def knowledge_tree(
 @router.get("/knowledge/pathways")
 async def knowledge_pathways(
     program: str = "新闻学",
+    mode: Literal["campus", "self_study"] | None = None,
     user: User = Depends(get_current_user),
 ):
-    return {"program": program, "pathways": get_skill_pathways(program)}
+    selected_mode = mode or (user.preferences or {}).get("knowledge_pathway_mode", "campus")
+    return {"program": program, "mode": selected_mode, "pathways": get_learning_pathways(program, selected_mode)}
+
+
+@router.put("/knowledge/pathways/mode")
+async def update_knowledge_pathway_mode(
+    payload: KnowledgePathwayModeUpdate,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    preferences = dict(user.preferences or {})
+    preferences["knowledge_pathway_mode"] = payload.mode
+    user.preferences = preferences
+    await db.commit()
+    return {"mode": payload.mode}
+
+
+@router.get("/knowledge/nodes/{node_id}/resources")
+async def knowledge_node_resources(
+    node_id: str,
+    user: User = Depends(get_current_user),
+):
+    resources = get_node_resources(node_id)
+    if not resources:
+        raise HTTPException(status_code=404, detail="知识点不存在或暂未关联资源")
+    return {"node_id": node_id, "resources": resources}
 
 
 @router.put("/knowledge/nodes/{node_id}/progress")
