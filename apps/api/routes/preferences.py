@@ -19,16 +19,16 @@ class LearningReminderPreferences(BaseModel):
     enabled: StrictBool = True
     time: str = Field(default="09:00", pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
     frequency: Literal["每日浇水", "隔日浇水", "每周浇水", "仅工作日", "自定义"] = "每日浇水"
-    week_days: list[int] = Field(default_factory=list, max_length=7)
+    week_days: list[Annotated[int, Field(ge=0, le=6)]] = Field(default_factory=list, max_length=7)
 
 
 class JobPushPreferences(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     enabled: StrictBool = True
-    job_types: list[str] = Field(default_factory=list, max_length=20)
-    locations: list[str] = Field(default_factory=list, max_length=20)
-    industries: list[str] = Field(default_factory=list, max_length=20)
+    job_types: list[Annotated[str, Field(min_length=1, max_length=50)]] = Field(default_factory=list, max_length=20)
+    locations: list[Annotated[str, Field(min_length=1, max_length=50)]] = Field(default_factory=list, max_length=20)
+    industries: list[Annotated[str, Field(min_length=1, max_length=50)]] = Field(default_factory=list, max_length=20)
 
 
 class VisibilityPreferences(BaseModel):
@@ -46,12 +46,12 @@ class PreferencesData(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     version: Literal[1] = 1
-    notifications: dict[Annotated[str, Field(min_length=1, max_length=50)], StrictBool] | None = Field(
-        default=None, max_length=20
+    notifications: dict[Annotated[str, Field(min_length=1, max_length=50)], StrictBool] = Field(
+        default_factory=dict, max_length=20
     )
-    learning_reminder: LearningReminderPreferences | None = None
-    job_push: JobPushPreferences | None = None
-    visibility: VisibilityPreferences | None = None
+    learning_reminder: LearningReminderPreferences = Field(default_factory=LearningReminderPreferences)
+    job_push: JobPushPreferences = Field(default_factory=JobPushPreferences)
+    visibility: VisibilityPreferences = Field(default_factory=VisibilityPreferences)
 
 
 class PreferencesUpdate(BaseModel):

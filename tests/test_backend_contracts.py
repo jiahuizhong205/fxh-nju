@@ -174,6 +174,20 @@ class BackendContractTests(unittest.TestCase):
                 preferences={"notifications": {"学习浇水提醒": "yes"}}
             )
 
+    def test_preference_sections_have_safe_defaults_and_validate_weekdays(self):
+        data = preferences.PreferencesData()
+        self.assertEqual(data.version, 1)
+        self.assertFalse(data.learning_reminder.enabled is False)
+        self.assertEqual(data.learning_reminder.time, "09:00")
+        with self.assertRaises(ValidationError):
+            preferences.PreferencesData(
+                learning_reminder={"week_days": [0, 7]}
+            )
+        with self.assertRaises(ValidationError):
+            preferences.PreferencesData(
+                job_push={"locations": ["南京"], "job_types": ["实习", 3]}
+            )
+
     def test_onboarding_status_is_persisted_on_account(self):
         user = User(
             username="onboarding-user",
