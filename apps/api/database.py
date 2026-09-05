@@ -37,3 +37,7 @@ async def init_db():
                 "ALTER TABLE users ADD COLUMN IF NOT EXISTS "
                 "preferences JSONB NOT NULL DEFAULT '{}'::jsonb"
             ))
+            await conn.execute(text(
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS "
+                "onboarding_completed BOOLEAN NOT NULL DEFAULT FALSE"
+            ))

@@ -9,9 +9,12 @@ import unittest
 from pathlib import Path
 
 from fastapi import HTTPException
+from pydantic import ValidationError
 
 from apps.api import config
+from apps.api.models import User
 from apps.api.routes import auth
+from apps.api.routes import preferences
 
 
 class _CommitOnlyDb:
@@ -107,6 +110,47 @@ class BackendContractTests(unittest.TestCase):
         self.assertEqual(user.token, "unchanged-token")
         self.assertEqual(db.commit_count, 0)
         self.assertTrue(auth._verify_password(old_password, user.salt, user.password_hash))
+
+    def test_preferences_schema_accepts_existing_notification_labels(self):
+        payload = preferences.PreferencesUpdate(
+            preferences={
+                "notifications": {
+                    "学习浇水提醒": True,
+                    "推荐报告完成": False,
+                }
+            }
+        )
+        self.assertEqual(payload.preferences.notifications["学习浇水提醒"], True)
+
+    def test_preferences_schema_rejects_unknown_sections_and_non_boolean_values(self):
+        with self.assertRaises(ValidationError):
+            preferences.PreferencesUpdate(preferences={"unknown": {"value": 1}})
+        with self.assertRaises(ValidationError):
+            preferences.PreferencesUpdate(
+                preferences={"notifications": {"学习浇水提醒": "yes"}}
+            )
+
+    def test_onboarding_status_is_persisted_on_account(self):
+        user = User(
+            username="onboarding-user",
+            password_hash="hash",
+            salt="salt",
+            nickname="新用户",
+            onboarding_completed=False,
+        )
+        db = _CommitOnlyDb()
+
+        result = asyncio.run(
+            auth.update_onboarding(
+                auth._OnboardingUpdate(completed=True),
+                user,
+                db,
+            )
+        )
+
+        self.assertTrue(result["onboarding_completed"])
+        self.assertTrue(user.onboarding_completed)
+        self.assertEqual(db.commit_count, 1)
 
 
 if __name__ == "__main__":

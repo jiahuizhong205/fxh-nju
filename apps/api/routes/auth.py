@@ -32,7 +32,12 @@ def _verify_password(password: str, salt: str, expected: str) -> bool:
 
 
 def _serialize_user(u: User) -> dict:
-    return {"id": str(u.id), "username": u.username, "nickname": u.nickname}
+    return {
+        "id": str(u.id),
+        "username": u.username,
+        "nickname": u.nickname,
+        "onboarding_completed": bool(u.onboarding_completed),
+    }
 
 
 # ── 鉴权依赖 ──────────────────────────────────────────
@@ -66,6 +71,10 @@ class _ChangePassword(BaseModel):
 
 class _UpdateNickname(BaseModel):
     nickname: str
+
+
+class _OnboardingUpdate(BaseModel):
+    completed: bool
 
 
 def _validate_password(password: str) -> None:
@@ -121,6 +130,22 @@ async def logout(user: User = Depends(get_current_user), db: AsyncSession = Depe
 @router.get("/auth/me")
 async def me(user: User = Depends(get_current_user)):
     return {"user": _serialize_user(user)}
+
+
+@router.get("/auth/onboarding")
+async def onboarding_status(user: User = Depends(get_current_user)):
+    return {"onboarding_completed": bool(user.onboarding_completed)}
+
+
+@router.put("/auth/onboarding")
+async def update_onboarding(
+    payload: _OnboardingUpdate,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    user.onboarding_completed = payload.completed
+    await db.commit()
+    return {"onboarding_completed": user.onboarding_completed}
 
 
 @router.post("/auth/change-password")

@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Column, String, Text, DateTime, Float, JSON, ForeignKey
+from sqlalchemy import Boolean, Column, String, Text, DateTime, Float, JSON, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 from pgvector.sqlalchemy import Vector
@@ -53,6 +53,7 @@ class User(Base):
     nickname: Mapped[str] = mapped_column(String(50), default="")
     token: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True)
     preferences: Mapped[dict] = mapped_column(JSON, default=dict)
+    onboarding_completed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
