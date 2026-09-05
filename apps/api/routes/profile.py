@@ -1,7 +1,9 @@
 """学生画像 API——CRUD 用户画像。"""
 
+from typing import Literal
+
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, StrictBool
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -10,6 +12,29 @@ from apps.api.models import RecommendationReport, StudentProfile, User, utcnow
 from apps.api.routes.auth import get_current_user
 
 router = APIRouter()
+
+
+class SchedulePreferences(BaseModel):
+    """排课页面和冲突处理页面共用的结构化偏好。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    energy_period: Literal["晨光", "黄金档", "暮色"] | None = None
+    time_slots: list[Literal["早八战士", "上午黄金档", "午后时光", "晚间高效派", "随意灵活"]] = Field(
+        default_factory=list, max_length=5
+    )
+    concentration: Literal["集中授课", "均匀分散", "每周几天高强度其余自由"] | None = None
+    nap: Literal["需要午休", "午休灵活", "无需午休"] | None = None
+    prefer_late: StrictBool = False
+    conflict_strategies: list[
+        Literal[
+            "免修不免考申请",
+            "跨校区通勤",
+            "优先选择线上/混合课程",
+            "放弃冲突课程/延后修读",
+            "申请课程替换/学分互认",
+        ]
+    ] = Field(default_factory=list, max_length=5)
 
 
 class ProfileUpdate(BaseModel):
@@ -23,7 +48,7 @@ class ProfileUpdate(BaseModel):
     campus_flexibility: bool = False
     credit_budget: int = 0
     certificate_goal: str = ""
-    schedule_preferences: dict = Field(default_factory=dict)
+    schedule_preferences: SchedulePreferences = Field(default_factory=SchedulePreferences)
 
 
 @router.get("/profile")

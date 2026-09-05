@@ -18,6 +18,7 @@ from apps.api.routes import auth
 from apps.api.routes import knowledge
 from apps.api.routes import planning
 from apps.api.routes import preferences
+from apps.api.routes import profile
 
 
 class _CommitOnlyDb:
@@ -362,6 +363,33 @@ class BackendContractTests(unittest.TestCase):
         self.assertEqual(payload.progress_percent, 100)
         with self.assertRaises(ValidationError):
             knowledge.KnowledgeProgressUpdate(status="done", progress_percent=101)
+
+    def test_profile_schedule_schema_accepts_supported_preferences_only(self):
+        payload = profile.ProfileUpdate(
+            major="新闻学",
+            grade="大二",
+            schedule_preferences={
+                "energy_period": "黄金档",
+                "time_slots": ["上午黄金档", "午后时光"],
+                "concentration": "均匀分散",
+                "nap": "需要午休",
+                "prefer_late": False,
+                "conflict_strategies": ["跨校区通勤", "优先选择线上/混合课程"],
+            },
+        )
+        self.assertEqual(payload.schedule_preferences.concentration, "均匀分散")
+        with self.assertRaises(ValidationError):
+            profile.ProfileUpdate(
+                major="新闻学",
+                grade="大二",
+                schedule_preferences={"concentration": "随便排"},
+            )
+        with self.assertRaises(ValidationError):
+            profile.ProfileUpdate(
+                major="新闻学",
+                grade="大二",
+                schedule_preferences={"unknown": True},
+            )
 
     def test_program_enrollment_keeps_account_and_program_relationship(self):
         enrollment = ProgramEnrollment(
