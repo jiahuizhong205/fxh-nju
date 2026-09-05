@@ -66,3 +66,9 @@ async def init_db():
             await conn.execute(text(
                 "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS application_note TEXT NOT NULL DEFAULT ''"
             ))
+            await conn.execute(text(
+                "ALTER TABLE feedback ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'received'"
+            ))
+            await conn.execute(text(
+                "ALTER TABLE feedback ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP"
+            ))

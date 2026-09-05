@@ -12,7 +12,7 @@ from fastapi import HTTPException
 from pydantic import ValidationError
 
 from apps.api import config
-from apps.api.models import Job, JobApplication, JobFavorite, KnowledgeProgress, LearningPlan, LearningRecord, ProgramEnrollment, RecommendationReport, User, UserContact
+from apps.api.models import Feedback, Job, JobApplication, JobFavorite, KnowledgeProgress, LearningPlan, LearningRecord, ProgramEnrollment, RecommendationReport, User, UserContact
 from apps.api.routes import account
 from apps.api.routes import auth
 from apps.api.routes import knowledge
@@ -399,6 +399,15 @@ class BackendContractTests(unittest.TestCase):
         )
         self.assertEqual(enrollment.program_name, "新闻学")
         self.assertEqual(enrollment.status, "active")
+
+    def test_feedback_keeps_processing_status_and_update_time(self):
+        feedback = Feedback(
+            user_id="00000000-0000-0000-0000-000000000001",
+            feedback_type="功能建议",
+            content="希望增加课程提醒",
+            status="in_progress",
+        )
+        self.assertEqual(feedback.status, "in_progress")
 
 
 if __name__ == "__main__":

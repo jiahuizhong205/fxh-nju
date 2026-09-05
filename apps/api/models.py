@@ -66,7 +66,9 @@ class Feedback(Base):
     content: Mapped[str] = mapped_column(Text)
     contact: Mapped[str] = mapped_column(String(200), default="")
     attachments: Mapped[list] = mapped_column(JSON, default=list)
+    status: Mapped[str] = mapped_column(String(20), default="received")  # received/in_progress/resolved
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
 class StudentProfile(Base):
