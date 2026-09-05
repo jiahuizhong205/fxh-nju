@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.api.database import get_db
-from apps.api.models import StudentProfile, Program, ProgramPlanItem, Course, Job, User
+from apps.api.models import StudentProfile, Program, ProgramPlanItem, Course, Job, JobFavorite, User
 from apps.api.routes.auth import get_current_user
 from services.planning.recommendation_engine import recommend
 from services.planning.course_planner import generate_plan, PROGRAM_PLANS
@@ -178,3 +178,57 @@ async def get_job(job_id: str, db: AsyncSession = Depends(get_db)):
     if not job:
         raise HTTPException(status_code=404, detail="岗位不存在")
     return {"job": _job_dict(job)}
+
+
+@router.get("/favorites/jobs")
+async def list_job_favorites(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(JobFavorite)
+        .where(JobFavorite.user_id == user.id)
+        .order_by(JobFavorite.created_at.desc())
+    )
+    return {"job_ids": [favorite.job_id for favorite in result.scalars().all()]}
+
+
+@router.put("/favorites/jobs/{job_id}")
+async def add_job_favorite(
+    job_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    job = await db.get(Job, job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="岗位不存在")
+
+    result = await db.execute(
+        select(JobFavorite).where(
+            JobFavorite.user_id == user.id,
+            JobFavorite.job_id == job_id,
+        )
+    )
+    if not result.scalar_one_or_none():
+        db.add(JobFavorite(user_id=user.id, job_id=job_id))
+        await db.commit()
+    return {"job_id": job_id, "favorited": True}
+
+
+@router.delete("/favorites/jobs/{job_id}")
+async def remove_job_favorite(
+    job_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(JobFavorite).where(
+            JobFavorite.user_id == user.id,
+            JobFavorite.job_id == job_id,
+        )
+    )
+    favorite = result.scalar_one_or_none()
+    if favorite:
+        await db.delete(favorite)
+        await db.commit()
+    return {"job_id": job_id, "favorited": False}

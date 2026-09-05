@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, Column, String, Text, DateTime, Float, JSON, ForeignKey
+from sqlalchemy import Boolean, Column, String, Text, DateTime, Float, JSON, ForeignKey, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 from pgvector.sqlalchemy import Vector
@@ -175,3 +175,17 @@ class Job(Base):
     skills_preferred: Mapped[list] = mapped_column(JSON, default=list)
     deadline: Mapped[str] = mapped_column(String(20))
     source: Mapped[str] = mapped_column(String(100))
+
+
+class JobFavorite(Base):
+    """账号级岗位收藏，替代浏览器本地存储。"""
+
+    __tablename__ = "job_favorites"
+    __table_args__ = (
+        UniqueConstraint("user_id", "job_id", name="uq_job_favorites_user_job"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    job_id: Mapped[str] = mapped_column(ForeignKey("jobs.id", ondelete="CASCADE"))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)

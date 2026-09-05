@@ -12,8 +12,9 @@ from fastapi import HTTPException
 from pydantic import ValidationError
 
 from apps.api import config
-from apps.api.models import User
+from apps.api.models import Job, JobFavorite, User
 from apps.api.routes import auth
+from apps.api.routes import planning
 from apps.api.routes import preferences
 
 
@@ -22,6 +23,48 @@ class _CommitOnlyDb:
 
     def __init__(self):
         self.commit_count = 0
+
+    async def commit(self):
+        self.commit_count += 1
+
+
+class _Result:
+    def __init__(self, rows=None, one=None):
+        self.rows = rows or []
+        self.one = one
+
+    def scalars(self):
+        return self
+
+    def all(self):
+        return self.rows
+
+    def scalar_one_or_none(self):
+        return self.one
+
+
+class _FavoriteDb:
+    def __init__(self, job=None, favorite=None, favorites=None):
+        self.job = job
+        self.favorite = favorite
+        self.favorites = favorites or []
+        self.added = []
+        self.deleted = []
+        self.commit_count = 0
+
+    async def get(self, model, identifier):
+        if model is Job:
+            return self.job if self.job and self.job.id == identifier else None
+        return None
+
+    async def execute(self, _query):
+        return _Result(rows=self.favorites, one=self.favorite)
+
+    def add(self, item):
+        self.added.append(item)
+
+    async def delete(self, item):
+        self.deleted.append(item)
 
     async def commit(self):
         self.commit_count += 1
@@ -151,6 +194,45 @@ class BackendContractTests(unittest.TestCase):
         self.assertTrue(result["onboarding_completed"])
         self.assertTrue(user.onboarding_completed)
         self.assertEqual(db.commit_count, 1)
+
+    def test_job_favorite_can_be_added_idempotently(self):
+        user = User(username="favorite-user", password_hash="hash", salt="salt")
+        job = Job(id="job-test", employer="测试单位", title="测试岗位", location="南京", deadline="2026-12-31", source="test")
+        db = _FavoriteDb(job=job)
+
+        first = asyncio.run(planning.add_job_favorite("job-test", user, db))
+        self.assertTrue(first["favorited"])
+        self.assertEqual(len(db.added), 1)
+        self.assertEqual(db.commit_count, 1)
+        self.assertIsInstance(db.added[0], JobFavorite)
+
+        db.favorite = db.added[0]
+        second = asyncio.run(planning.add_job_favorite("job-test", user, db))
+        self.assertTrue(second["favorited"])
+        self.assertEqual(len(db.added), 1)
+        self.assertEqual(db.commit_count, 1)
+
+    def test_job_favorite_list_and_delete(self):
+        user = User(username="favorite-user-2", password_hash="hash", salt="salt")
+        first = JobFavorite(user_id=user.id, job_id="job-1")
+        second = JobFavorite(user_id=user.id, job_id="job-2")
+        db = _FavoriteDb(favorites=[first, second], favorite=first)
+
+        result = asyncio.run(planning.list_job_favorites(user, db))
+        self.assertEqual(result["job_ids"], ["job-1", "job-2"])
+
+        deleted = asyncio.run(planning.remove_job_favorite("job-1", user, db))
+        self.assertFalse(deleted["favorited"])
+        self.assertEqual(db.deleted, [first])
+        self.assertEqual(db.commit_count, 1)
+
+    def test_job_favorite_rejects_missing_job(self):
+        user = User(username="favorite-user-3", password_hash="hash", salt="salt")
+        db = _FavoriteDb()
+        with self.assertRaises(HTTPException) as ctx:
+            asyncio.run(planning.add_job_favorite("missing", user, db))
+        self.assertEqual(ctx.exception.status_code, 404)
+        self.assertEqual(db.commit_count, 0)
 
 
 if __name__ == "__main__":
