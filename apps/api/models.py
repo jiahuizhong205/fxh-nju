@@ -57,6 +57,18 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
+class PasswordHistory(Base):
+    """最近使用过的密码摘要，用于阻止立即复用旧密码。"""
+
+    __tablename__ = "password_history"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    password_hash: Mapped[str] = mapped_column(String(128))
+    salt: Mapped[str] = mapped_column(String(32))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
 class Feedback(Base):
     __tablename__ = "feedback"
 

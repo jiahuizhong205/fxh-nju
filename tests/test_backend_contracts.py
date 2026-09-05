@@ -12,7 +12,7 @@ from fastapi import HTTPException
 from pydantic import ValidationError
 
 from apps.api import config
-from apps.api.models import Feedback, Job, JobApplication, JobFavorite, KnowledgeProgress, LearningPlan, LearningRecord, ProgramEnrollment, RecommendationReport, User, UserContact
+from apps.api.models import Feedback, Job, JobApplication, JobFavorite, KnowledgeProgress, LearningPlan, LearningRecord, PasswordHistory, ProgramEnrollment, RecommendationReport, User, UserContact
 from apps.api.routes import account
 from apps.api.routes import auth
 from apps.api.routes import knowledge
@@ -26,6 +26,13 @@ class _CommitOnlyDb:
 
     def __init__(self):
         self.commit_count = 0
+        self.added = []
+
+    async def execute(self, _query):
+        return _Result(rows=self.added)
+
+    def add(self, item):
+        self.added.append(item)
 
     async def commit(self):
         self.commit_count += 1
@@ -167,6 +174,40 @@ class BackendContractTests(unittest.TestCase):
         self.assertEqual(user.token, "unchanged-token")
         self.assertEqual(db.commit_count, 0)
         self.assertTrue(auth._verify_password(old_password, user.salt, user.password_hash))
+
+    def test_change_password_rejects_recent_password_reuse(self):
+        old_password = "Current123"
+        previous_password = "Previous123"
+        salt, digest = auth._hash_password(old_password)
+        previous_salt, previous_digest = auth._hash_password(previous_password)
+        user = auth.User(
+            username="test-user-3",
+            password_hash=digest,
+            salt=salt,
+            nickname="测试用户",
+            token="unchanged-token",
+        )
+        db = _CommitOnlyDb()
+        db.added.append(
+            PasswordHistory(
+                user_id=user.id,
+                password_hash=previous_digest,
+                salt=previous_salt,
+            )
+        )
+
+        with self.assertRaises(HTTPException) as ctx:
+            asyncio.run(
+                auth.change_password(
+                    auth._ChangePassword(old_password=old_password, new_password=previous_password),
+                    user,
+                    db,
+                )
+            )
+
+        self.assertEqual(ctx.exception.status_code, 400)
+        self.assertEqual(db.commit_count, 0)
+        self.assertEqual(user.token, "unchanged-token")
 
     def test_preferences_schema_accepts_existing_notification_labels(self):
         payload = preferences.PreferencesUpdate(
@@ -408,6 +449,15 @@ class BackendContractTests(unittest.TestCase):
             status="in_progress",
         )
         self.assertEqual(feedback.status, "in_progress")
+
+    def test_password_history_keeps_previous_credential_metadata(self):
+        history = PasswordHistory(
+            user_id="00000000-0000-0000-0000-000000000001",
+            password_hash="old-hash",
+            salt="old-salt",
+        )
+        self.assertEqual(history.password_hash, "old-hash")
+        self.assertEqual(history.salt, "old-salt")
 
 
 if __name__ == "__main__":

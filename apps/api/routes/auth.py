@@ -13,7 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.api.database import get_db
-from apps.api.models import User
+from apps.api.models import PasswordHistory, User
 
 router = APIRouter()
 
@@ -157,7 +157,17 @@ async def change_password(
     if not _verify_password(payload.old_password, user.salt, user.password_hash):
         raise HTTPException(status_code=400, detail="当前密码错误")
     _validate_password(payload.new_password)
+    history_result = await db.execute(
+        select(PasswordHistory)
+        .where(PasswordHistory.user_id == user.id)
+        .order_by(PasswordHistory.created_at.desc())
+        .limit(5)
+    )
+    previous_passwords = [user, *history_result.scalars().all()]
+    if any(_verify_password(payload.new_password, item.salt, item.password_hash) for item in previous_passwords):
+        raise HTTPException(status_code=400, detail="新密码不能复用最近使用过的密码")
 
+    db.add(PasswordHistory(user_id=user.id, password_hash=user.password_hash, salt=user.salt))
     user.salt, user.password_hash = _hash_password(payload.new_password)
     # 改密后立即使旧 token 失效，避免旧会话继续访问账号数据。
     user.token = secrets.token_urlsafe(32)
