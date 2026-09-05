@@ -340,6 +340,8 @@ class Course(Base):
     teaching_place: Mapped[str] = mapped_column(Text, default="")
     school_term: Mapped[str] = mapped_column(String(20), default="")
     schedule: Mapped[list] = mapped_column(JSON, default=list)
+    capacity: Mapped[int] = mapped_column(default=0)  # 0 表示暂未提供容量
+    enrolled_count: Mapped[int] = mapped_column(default=0)
     source: Mapped[str] = mapped_column(String(100), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 

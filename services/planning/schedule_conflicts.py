@@ -81,6 +81,7 @@ def build_schedule_options(
         options = sorted(
             options_by_name.get(name, []),
             key=lambda offering: (
+                1 if offering.get("is_full") else 0,
                 0 if user_campus and offering.get("campus") == user_campus else 1,
                 offering.get("school_term", ""),
                 offering.get("teaching_class_id", ""),

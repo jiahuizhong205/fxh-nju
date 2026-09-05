@@ -480,6 +480,17 @@ class BackendContractTests(unittest.TestCase):
         self.assertEqual(options["missing_courses"], ["传播学概论"])
         self.assertFalse(options["all_available"])
 
+    def test_schedule_options_put_full_classes_after_available_classes(self):
+        options = build_schedule_options(
+            [{"course": "传播学概论", "credits": 3}],
+            [
+                {"course_name": "传播学概论", "campus": "仙林校区", "teaching_class_id": "FULL", "is_full": True},
+                {"course_name": "传播学概论", "campus": "仙林校区", "teaching_class_id": "OPEN", "is_full": False},
+            ],
+            user_campus="仙林校区",
+        )
+        self.assertEqual(options["courses"][0]["offerings"][0]["teaching_class_id"], "OPEN")
+
     def test_saved_plan_csv_export_keeps_traceable_plan_metadata(self):
         plan = LearningPlan(
             id="00000000-0000-0000-0000-000000000001",

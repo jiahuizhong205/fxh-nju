@@ -690,6 +690,9 @@ def _course_dict(c) -> dict:
         "teaching_place": c.teaching_place,
         "school_term": c.school_term,
         "schedule": c.schedule or [],
+        "capacity": c.capacity,
+        "enrolled_count": c.enrolled_count,
+        "is_full": bool(c.capacity and c.enrolled_count >= c.capacity),
     }
 
 
