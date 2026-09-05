@@ -7,6 +7,7 @@ import uuid
 from datetime import date, timedelta
 from typing import Literal
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from sqlalchemy import select
@@ -14,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.api.database import get_db
 from apps.api.models import LearningActivity, LearningPlan, LearningRecord, Program, User, UserContact, VerificationChallenge, utcnow
+from apps.api.config import settings
 from apps.api.routes.auth import get_current_user
 
 router = APIRouter()
@@ -118,6 +120,53 @@ def _challenge_request_allowed(created_at, now=None) -> bool:
         return True
     now = now or utcnow()
     return (now - created_at).total_seconds() >= VERIFICATION_REQUEST_COOLDOWN_SECONDS
+
+
+def _verification_provider_payload(
+    contact_type: str,
+    contact_value: str,
+    code: str,
+    purpose: str,
+) -> dict:
+    return {
+        "channel": contact_type,
+        "to": contact_value,
+        "code": code,
+        "purpose": purpose,
+    }
+
+
+async def _deliver_verification_code(
+    challenge: VerificationChallenge,
+    contact: UserContact,
+    code: str,
+) -> str:
+    """向可选 provider 投递验证码；未配置时保留 queued，不泄露验证码。"""
+    provider_url = settings.verification_provider_url.strip()
+    if not provider_url:
+        return "queued"
+    challenge.delivery_attempts = (challenge.delivery_attempts or 0) + 1
+    try:
+        headers = {}
+        if settings.verification_provider_api_key:
+            headers["Authorization"] = f"Bearer {settings.verification_provider_api_key}"
+        async with httpx.AsyncClient(timeout=settings.verification_provider_timeout_seconds) as client:
+            response = await client.post(
+                provider_url,
+                json=_verification_provider_payload(contact.contact_type, contact.value, code, challenge.purpose),
+                headers=headers,
+            )
+            response.raise_for_status()
+    except Exception as exc:
+        challenge.delivery_status = "failed"
+        challenge.delivery_error = str(exc)[:2000]
+        challenge.updated_at = utcnow()
+        return "failed"
+    challenge.delivery_status = "sent"
+    challenge.delivery_error = ""
+    challenge.delivered_at = utcnow()
+    challenge.updated_at = utcnow()
+    return "sent"
 
 
 def _verify_challenge_code(challenge: VerificationChallenge, code: str, now=None) -> tuple[bool, str]:
@@ -300,16 +349,19 @@ async def request_contact_verification_code(
         code_salt=salt,
         purpose="contact_verification",
         expires_at=utcnow() + timedelta(minutes=10),
+        delivery_status="queued",
     )
     db.add(challenge)
+    await db.flush()
+    delivery_status = await _deliver_verification_code(challenge, contact, code)
     await db.commit()
     await db.refresh(challenge)
-    # 实际短信/邮件投递由 provider worker 消费此挑战；不在 API 响应中泄露验证码。
     return {
-        "status": "queued_for_delivery",
+        "status": "sent_to_provider" if delivery_status == "sent" else "queued_for_delivery",
         "delivery_channel": contact.contact_type,
+        "delivery_status": delivery_status,
         "expires_at": challenge.expires_at.isoformat(),
-        "message": "验证码已进入投递队列，待配置短信/邮件服务后发送",
+        "message": "验证码已提交投递" if delivery_status == "sent" else "验证码已进入投递队列，待配置短信/邮件服务后发送",
     }
 
 
@@ -402,15 +454,19 @@ async def request_password_reset(
             ))
             for challenge in previous.scalars().all():
                 challenge.consumed = True
-            _, salt, digest = _new_verification_code()
-            db.add(VerificationChallenge(
+            code, salt, digest = _new_verification_code()
+            challenge = VerificationChallenge(
                 user_id=target.id,
                 contact_id=contact.id,
                 code_hash=digest,
                 code_salt=salt,
                 purpose="password_reset",
                 expires_at=utcnow() + timedelta(minutes=10),
-            ))
+                delivery_status="queued",
+            )
+            db.add(challenge)
+            await db.flush()
+            await _deliver_verification_code(challenge, contact, code)
             await db.commit()
     # 无论账号、联系方式是否存在，都返回相同文案，降低枚举风险。
     return {"status": "accepted", "message": "如果账号存在且联系方式已验证，验证码将进入投递队列"}

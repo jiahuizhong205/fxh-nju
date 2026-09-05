@@ -20,6 +20,10 @@ class Settings(BaseSettings):
     api_key: str = ""
     # 本地 / Docker 默认使用 mock，真实模型必须通过环境变量显式开启。
     mock_llm: bool = True
+    # 验证码供应商可选；留空时仅创建挑战，不访问外部网络。
+    verification_provider_url: str = ""
+    verification_provider_api_key: str = ""
+    verification_provider_timeout_seconds: float = 5.0
 
 
 settings = Settings()

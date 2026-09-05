@@ -92,6 +92,22 @@ async def init_db():
                 "purpose VARCHAR(30) NOT NULL DEFAULT 'contact_verification'"
             ))
             await conn.execute(text(
+                "ALTER TABLE verification_challenges ADD COLUMN IF NOT EXISTS "
+                "delivery_status VARCHAR(20) NOT NULL DEFAULT 'queued'"
+            ))
+            await conn.execute(text(
+                "ALTER TABLE verification_challenges ADD COLUMN IF NOT EXISTS "
+                "delivery_attempts INTEGER NOT NULL DEFAULT 0"
+            ))
+            await conn.execute(text(
+                "ALTER TABLE verification_challenges ADD COLUMN IF NOT EXISTS "
+                "delivery_error TEXT NOT NULL DEFAULT ''"
+            ))
+            await conn.execute(text(
+                "ALTER TABLE verification_challenges ADD COLUMN IF NOT EXISTS "
+                "delivered_at TIMESTAMP NULL"
+            ))
+            await conn.execute(text(
                 "ALTER TABLE courses ADD COLUMN IF NOT EXISTS "
                 "capacity INTEGER NOT NULL DEFAULT 0"
             ))

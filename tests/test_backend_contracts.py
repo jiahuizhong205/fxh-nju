@@ -416,6 +416,20 @@ class BackendContractTests(unittest.TestCase):
         self.assertTrue(account._challenge_request_allowed(now - timedelta(seconds=61), now=now))
         self.assertTrue(account._challenge_request_allowed(None, now=now))
 
+    def test_verification_provider_payload_contains_no_code_hash_or_password_data(self):
+        payload = account._verification_provider_payload(
+            contact_type="email",
+            contact_value="student@nju.edu.cn",
+            code="123456",
+            purpose="password_reset",
+        )
+        self.assertEqual(payload["channel"], "email")
+        self.assertEqual(payload["to"], "student@nju.edu.cn")
+        self.assertEqual(payload["code"], "123456")
+        self.assertEqual(payload["purpose"], "password_reset")
+        self.assertNotIn("password", payload)
+        self.assertNotIn("code_hash", payload)
+
     def test_visibility_policy_is_conservative_for_friend_scope(self):
         self.assertTrue(profile._can_view_profile("仅自己", is_self=True, same_major=False))
         self.assertTrue(profile._can_view_profile("全校公开", is_self=False, same_major=False))

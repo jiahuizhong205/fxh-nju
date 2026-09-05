@@ -433,6 +433,10 @@ class VerificationChallenge(Base):
     attempts: Mapped[int] = mapped_column(default=0)
     max_attempts: Mapped[int] = mapped_column(default=5)
     consumed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    delivery_status: Mapped[str] = mapped_column(String(20), default="queued")  # queued/sent/failed
+    delivery_attempts: Mapped[int] = mapped_column(default=0)
+    delivery_error: Mapped[str] = mapped_column(Text, default="")
+    delivered_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
