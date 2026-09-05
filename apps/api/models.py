@@ -277,3 +277,19 @@ class LearningRecord(Base):
     grade: Mapped[float | None] = mapped_column(Float, nullable=True)
     source: Mapped[str] = mapped_column(String(50), default="manual")
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class KnowledgeProgress(Base):
+    """账号级知识点完成状态。"""
+
+    __tablename__ = "knowledge_progress"
+    __table_args__ = (
+        UniqueConstraint("user_id", "node_id", name="uq_knowledge_progress_user_node"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    node_id: Mapped[str] = mapped_column(String(64))
+    status: Mapped[str] = mapped_column(String(20), default="todo")  # todo/progress/done/mastered
+    progress_percent: Mapped[int] = mapped_column(default=0)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)

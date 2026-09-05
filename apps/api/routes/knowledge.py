@@ -3,22 +3,31 @@
 import io
 from uuid import uuid4, UUID
 
-from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException
+from typing import Literal
+
+from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, Query
+from pydantic import BaseModel, Field
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.api.database import get_db
-from apps.api.models import Document, User
+from apps.api.models import Document, KnowledgeProgress, User, utcnow
 from apps.api.config import settings
 from apps.api.routes.auth import get_current_user
 from services.rag.ingestion import ingest_document
 from services.rag.retrieval import hybrid_search, build_citations
+from services.rag.knowledge_graph import NEWS_GRAPH, get_knowledge_tree, get_skill_pathways
 
 router = APIRouter()
 
 VALID_TRUST_LEVELS = {"S", "A", "B", "C"}
 VALID_SOURCE_TYPES = {"policy", "regulation", "course_catalog", "job_posting", "other"}
 VALID_CONTENT_TYPES = {"text/plain", "text/markdown", "application/pdf"}
+
+
+class KnowledgeProgressUpdate(BaseModel):
+    status: Literal["todo", "progress", "done", "mastered"]
+    progress_percent: int = Field(ge=0, le=100)
 
 
 def _extract_upload_text(content: bytes, content_type: str | None, filename: str | None) -> str:
@@ -118,6 +127,85 @@ async def list_documents(
         "valid_to": d.valid_to.isoformat() if d.valid_to else None,
         "created_at": d.created_at.isoformat(),
     } for d in docs]
+
+
+@router.get("/knowledge/tree")
+async def knowledge_tree(
+    course_names: list[str] | None = Query(default=None),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """返回知识树并合并当前账号的节点进度。"""
+    names = course_names or [node.name for node in NEWS_GRAPH["nodes"] if node.label == "Course"]
+    tree = get_knowledge_tree(names)
+    node_ids = [node["id"] for node in tree["nodes"]]
+    if not node_ids:
+        return {**tree, "progress_percent": 0}
+    result = await db.execute(
+        select(KnowledgeProgress).where(
+            KnowledgeProgress.user_id == user.id,
+            KnowledgeProgress.node_id.in_(node_ids),
+        )
+    )
+    progress_by_node = {item.node_id: item for item in result.scalars().all()}
+    total = 0
+    for node in tree["nodes"]:
+        progress = progress_by_node.get(node["id"])
+        node["status"] = progress.status if progress else "todo"
+        node["progress_percent"] = progress.progress_percent if progress else 0
+        total += node["progress_percent"]
+    return {**tree, "progress_percent": round(total / len(tree["nodes"]))}
+
+
+@router.get("/knowledge/pathways")
+async def knowledge_pathways(
+    program: str = "新闻学",
+    user: User = Depends(get_current_user),
+):
+    return {"program": program, "pathways": get_skill_pathways(program)}
+
+
+@router.put("/knowledge/nodes/{node_id}/progress")
+async def update_knowledge_progress(
+    node_id: str,
+    payload: KnowledgeProgressUpdate,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    known = next(
+        (node for node in NEWS_GRAPH["nodes"] if node.id == node_id and node.label == "KnowledgePoint"),
+        None,
+    )
+    if not known:
+        raise HTTPException(status_code=404, detail="知识点不存在")
+    result = await db.execute(
+        select(KnowledgeProgress).where(
+            KnowledgeProgress.user_id == user.id,
+            KnowledgeProgress.node_id == node_id,
+        )
+    )
+    progress = result.scalar_one_or_none()
+    if progress:
+        progress.status = payload.status
+        progress.progress_percent = payload.progress_percent
+        progress.updated_at = utcnow()
+    else:
+        progress = KnowledgeProgress(
+            user_id=user.id,
+            node_id=node_id,
+            status=payload.status,
+            progress_percent=payload.progress_percent,
+            updated_at=utcnow(),
+        )
+        db.add(progress)
+    await db.commit()
+    await db.refresh(progress)
+    return {
+        "node_id": progress.node_id,
+        "status": progress.status,
+        "progress_percent": progress.progress_percent,
+        "updated_at": progress.updated_at.isoformat() if progress.updated_at else None,
+    }
 
 
 @router.post("/knowledge/versions/{version}/activate")

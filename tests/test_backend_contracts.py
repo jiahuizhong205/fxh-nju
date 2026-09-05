@@ -12,9 +12,10 @@ from fastapi import HTTPException
 from pydantic import ValidationError
 
 from apps.api import config
-from apps.api.models import Job, JobApplication, JobFavorite, LearningPlan, LearningRecord, RecommendationReport, User, UserContact
+from apps.api.models import Job, JobApplication, JobFavorite, KnowledgeProgress, LearningPlan, LearningRecord, RecommendationReport, User, UserContact
 from apps.api.routes import account
 from apps.api.routes import auth
+from apps.api.routes import knowledge
 from apps.api.routes import planning
 from apps.api.routes import preferences
 
@@ -323,6 +324,23 @@ class BackendContractTests(unittest.TestCase):
         self.assertEqual(application.status, "interview")
         self.assertEqual(application.channel, "官网")
         self.assertEqual(application.note, "已完成一面")
+
+    def test_knowledge_progress_keeps_node_status_and_completion(self):
+        progress = KnowledgeProgress(
+            user_id="00000000-0000-0000-0000-000000000001",
+            node_id="k003",
+            status="progress",
+            progress_percent=60,
+        )
+        self.assertEqual(progress.node_id, "k003")
+        self.assertEqual(progress.status, "progress")
+        self.assertEqual(progress.progress_percent, 60)
+
+    def test_knowledge_progress_schema_rejects_out_of_range_completion(self):
+        payload = knowledge.KnowledgeProgressUpdate(status="done", progress_percent=100)
+        self.assertEqual(payload.progress_percent, 100)
+        with self.assertRaises(ValidationError):
+            knowledge.KnowledgeProgressUpdate(status="done", progress_percent=101)
 
 
 if __name__ == "__main__":
