@@ -23,6 +23,7 @@ from apps.api.routes import profile
 from apps.api.routes import sync
 from apps.api.routes import notifications
 from apps.api.routes import cache
+from apps.api.routes import meta
 from packages.contracts.schemas import ChatRequest
 from services.planning.recommendation_engine import hard_filter, recommend
 from services.planning.eligibility import evaluate_program_eligibility
@@ -405,6 +406,11 @@ class BackendContractTests(unittest.TestCase):
         record = CacheInvalidation(scope="images", generation=2)
         self.assertEqual(cache._serialize(record, "images")["generation"], 2)
         self.assertEqual(cache._serialize(None, "conversations")["generation"], 0)
+
+    def test_product_metadata_is_centralized_for_about_page(self):
+        self.assertEqual(meta.PRODUCT_METADATA["product_name"], "福小禾")
+        self.assertEqual(meta.PRODUCT_METADATA["birth_year"], 2026)
+        self.assertTrue(any(item["key"] == "planning" for item in meta.PRODUCT_METADATA["features"]))
 
     def test_queued_in_app_notification_advances_to_sent_when_due(self):
         notification = Notification(
