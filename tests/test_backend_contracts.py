@@ -27,6 +27,7 @@ from packages.contracts.schemas import ChatRequest
 from services.planning.recommendation_engine import hard_filter, recommend
 from services.planning.eligibility import evaluate_program_eligibility
 from services.planning.schedule_conflicts import detect_schedule_conflicts
+from services.planning.career_engine import build_career_outcomes
 from services.rag.knowledge_graph import get_learning_pathways, get_node_resources, get_skill_pathways
 
 
@@ -449,6 +450,24 @@ class BackendContractTests(unittest.TestCase):
         self.assertEqual(payload.teaching_class_ids, ["TC-001", "TC-002"])
         plan = LearningPlan(program_name="新闻学", schedule_analysis={"feasible": False})
         self.assertFalse(planning._saved_plan_dict(plan)["schedule_analysis"]["feasible"])
+
+    def test_career_outcomes_are_explained_by_jobs_and_skill_paths(self):
+        outcomes = build_career_outcomes(
+            [{
+                "skill_name": "新闻采写能力",
+                "knowledge_points": ["新闻价值判断"],
+                "careers": ["记者/编辑"],
+            }],
+            [{
+                "title": "实习记者",
+                "skills_required": ["新闻采写能力"],
+                "skills_preferred": [],
+            }],
+        )
+        self.assertEqual(outcomes[0]["career"], "记者/编辑")
+        self.assertEqual(outcomes[0]["related_job_count"], 1)
+        self.assertEqual(outcomes[0]["job_titles"], ["实习记者"])
+        self.assertIn("岗位表", outcomes[0]["evidence"])
 
     def test_learning_progress_summary_uses_only_completed_credits(self):
         records = [

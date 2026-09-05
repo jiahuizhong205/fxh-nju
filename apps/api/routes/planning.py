@@ -20,9 +20,10 @@ from apps.api.models import (
 from apps.api.routes.auth import get_current_user
 from services.planning.recommendation_engine import recommend
 from services.planning.course_planner import generate_plan, PROGRAM_PLANS
-from services.planning.career_engine import match_jobs
+from services.planning.career_engine import SAMPLE_JOBS, build_career_outcomes, match_jobs
 from services.planning.eligibility import evaluate_program_eligibility
 from services.planning.schedule_conflicts import detect_schedule_conflicts
+from services.rag.knowledge_graph import get_skill_pathways
 
 router = APIRouter()
 
@@ -186,6 +187,19 @@ async def program_participants(program_name: str, db: AsyncSession = Depends(get
     if not await db.get(Program, program_name):
         raise HTTPException(status_code=404, detail=f"未找到「{program_name}」")
     return {"program": program_name, "participant_count": await _participant_count(db, program_name)}
+
+
+@router.get("/programs/{program_name}/career-outcomes")
+async def program_career_outcomes(program_name: str, db: AsyncSession = Depends(get_db)):
+    """返回基于岗位表的职业出口关联统计，不代表真实就业率。"""
+    if not await db.get(Program, program_name):
+        raise HTTPException(status_code=404, detail=f"未找到「{program_name}」")
+    jobs = await _load_jobs(db)
+    return {
+        "program": program_name,
+        "outcomes": build_career_outcomes(get_skill_pathways(program_name), jobs or SAMPLE_JOBS),
+        "data_note": "统计来自当前岗位表和知识图谱映射，不代表真实就业率或官方就业去向",
+    }
 
 
 @router.get("/programs/{program_name}/prerequisites")
