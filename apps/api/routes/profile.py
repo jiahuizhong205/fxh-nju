@@ -3,13 +3,14 @@
 import uuid
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.api.database import get_db
-from apps.api.models import LearningRecord, RecommendationReport, StudentProfile, User, utcnow
+from apps.api.models import LearningRecord, RecommendationReport, StudentProfile, User, UserAvatar, utcnow
+from apps.api.config import settings
 from apps.api.routes.auth import get_current_user
 from apps.api.routes.preferences import VisibilityPreferences
 
@@ -79,6 +80,19 @@ class ProfileUpdate(BaseModel):
         return list(dict.fromkeys(values))
 
 
+AVATAR_CONTENT_TYPES = {"image/jpeg", "image/png", "image/webp"}
+AVATAR_MAX_BYTES = 2 * 1024 * 1024
+
+
+def _validate_avatar(content_type: str | None, content: bytes) -> None:
+    if content_type not in AVATAR_CONTENT_TYPES:
+        raise ValueError("头像仅支持 JPG、PNG 或 WebP")
+    if not content:
+        raise ValueError("头像文件不能为空")
+    if len(content) > min(AVATAR_MAX_BYTES, settings.max_upload_bytes):
+        raise ValueError("头像文件不能超过 2 MB")
+
+
 @router.get("/profile/options")
 def get_profile_options():
     return {
@@ -101,6 +115,66 @@ async def get_profile(user: User = Depends(get_current_user), db: AsyncSession =
     if not profile:
         return {"profile": None}
     return {"profile": _serialize(profile)}
+
+
+@router.post("/profile/avatar")
+async def upload_avatar(
+    file: UploadFile = File(...),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    content = await file.read()
+    try:
+        _validate_avatar(file.content_type, content)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    result = await db.execute(select(UserAvatar).where(UserAvatar.user_id == user.id))
+    avatar = result.scalar_one_or_none()
+    if avatar:
+        avatar.content_type = file.content_type
+        avatar.data = content
+        avatar.size_bytes = len(content)
+        avatar.updated_at = utcnow()
+    else:
+        avatar = UserAvatar(
+            user_id=user.id,
+            content_type=file.content_type,
+            data=content,
+            size_bytes=len(content),
+            updated_at=utcnow(),
+        )
+        db.add(avatar)
+    await db.commit()
+    await db.refresh(avatar)
+    return {
+        "avatar": {
+            "size_bytes": avatar.size_bytes,
+            "content_type": avatar.content_type,
+            "updated_at": avatar.updated_at.isoformat() if avatar.updated_at else None,
+        }
+    }
+
+
+@router.get("/profile/avatar")
+async def get_avatar(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    from fastapi.responses import Response
+
+    result = await db.execute(select(UserAvatar).where(UserAvatar.user_id == user.id))
+    avatar = result.scalar_one_or_none()
+    if not avatar:
+        raise HTTPException(status_code=404, detail="尚未设置头像")
+    return Response(content=avatar.data, media_type=avatar.content_type)
+
+
+@router.delete("/profile/avatar")
+async def delete_avatar(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(UserAvatar).where(UserAvatar.user_id == user.id))
+    avatar = result.scalar_one_or_none()
+    if not avatar:
+        raise HTTPException(status_code=404, detail="尚未设置头像")
+    await db.delete(avatar)
+    await db.commit()
+    return {"status": "deleted"}
 
 
 @router.put("/profile")

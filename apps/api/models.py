@@ -1,7 +1,7 @@
 import uuid
 from datetime import date, datetime, timezone
 
-from sqlalchemy import Boolean, Column, String, Text, DateTime, Float, JSON, ForeignKey, UniqueConstraint
+from sqlalchemy import Boolean, Column, String, Text, DateTime, Float, JSON, ForeignKey, UniqueConstraint, LargeBinary
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 from pgvector.sqlalchemy import Vector
@@ -166,6 +166,21 @@ class Feedback(Base):
     attachments: Mapped[list] = mapped_column(JSON, default=list)
     status: Mapped[str] = mapped_column(String(20), default="received")  # received/in_progress/resolved
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class UserAvatar(Base):
+    """账号头像原图；后续可在对象存储迁移时替换 data 字段。"""
+
+    __tablename__ = "user_avatars"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), unique=True
+    )
+    content_type: Mapped[str] = mapped_column(String(50))
+    data: Mapped[bytes] = mapped_column(LargeBinary)
+    size_bytes: Mapped[int] = mapped_column()
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 

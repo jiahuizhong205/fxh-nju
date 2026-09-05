@@ -13,7 +13,7 @@ from fastapi import HTTPException
 from pydantic import ValidationError
 
 from apps.api import config
-from apps.api.models import CacheInvalidation, Feedback, Job, JobApplication, JobFavorite, KnowledgeProgress, LearningActivity, LearningPlan, LearningRecord, Notification, PasswordHistory, ProgramEnrollment, RecommendationReport, SyncRecord, User, UserAccountLink, UserContact, UserSession, VerificationChallenge, utcnow
+from apps.api.models import CacheInvalidation, Feedback, Job, JobApplication, JobFavorite, KnowledgeProgress, LearningActivity, LearningPlan, LearningRecord, Notification, PasswordHistory, ProgramEnrollment, RecommendationReport, SyncRecord, User, UserAccountLink, UserAvatar, UserContact, UserSession, VerificationChallenge, utcnow
 from apps.api.routes import account
 from apps.api.routes import auth
 from apps.api.routes import knowledge
@@ -420,6 +420,15 @@ class BackendContractTests(unittest.TestCase):
         self.assertFalse(auth._can_switch_account(current_id, current_id, {current_id}))
         link = UserAccountLink(owner_user_id=current_id, linked_user_id=target_id)
         self.assertEqual(str(link.linked_user_id), target_id)
+
+    def test_avatar_upload_validates_type_and_size_before_storage(self):
+        profile._validate_avatar("image/png", b"png-bytes")
+        with self.assertRaises(ValueError):
+            profile._validate_avatar("text/plain", b"not-image")
+        with self.assertRaises(ValueError):
+            profile._validate_avatar("image/png", b"")
+        avatar = UserAvatar(content_type="image/png", data=b"png-bytes", size_bytes=9)
+        self.assertEqual(avatar.size_bytes, 9)
 
     def test_queued_in_app_notification_advances_to_sent_when_due(self):
         notification = Notification(
