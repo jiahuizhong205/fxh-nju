@@ -13,7 +13,7 @@ from fastapi import HTTPException
 from pydantic import ValidationError
 
 from apps.api import config
-from apps.api.models import Feedback, Job, JobApplication, JobFavorite, KnowledgeProgress, LearningActivity, LearningPlan, LearningRecord, PasswordHistory, ProgramEnrollment, RecommendationReport, SyncRecord, User, UserContact
+from apps.api.models import Feedback, Job, JobApplication, JobFavorite, KnowledgeProgress, LearningActivity, LearningPlan, LearningRecord, Notification, PasswordHistory, ProgramEnrollment, RecommendationReport, SyncRecord, User, UserContact
 from apps.api.routes import account
 from apps.api.routes import auth
 from apps.api.routes import knowledge
@@ -21,6 +21,7 @@ from apps.api.routes import planning
 from apps.api.routes import preferences
 from apps.api.routes import profile
 from apps.api.routes import sync
+from apps.api.routes import notifications
 from packages.contracts.schemas import ChatRequest
 from services.planning.recommendation_engine import hard_filter
 from services.planning.schedule_conflicts import detect_schedule_conflicts
@@ -480,6 +481,23 @@ class BackendContractTests(unittest.TestCase):
         self.assertEqual(payload.scopes, ["profile", "learning_records"])
         with self.assertRaises(ValidationError):
             sync.SyncRequest(scopes=["unknown"])
+
+    def test_notification_keeps_delivery_and_read_state(self):
+        item = Notification(
+            user_id="00000000-0000-0000-0000-000000000001",
+            category="recommendation",
+            title="推荐报告已生成",
+            body="你的推荐报告已准备好",
+            channel="in_app",
+            status="queued",
+        )
+        self.assertEqual(item.category, "recommendation")
+        self.assertEqual(item.status, "queued")
+        self.assertIsNone(item.read_at)
+
+    def test_notification_request_validates_supported_channels(self):
+        payload = notifications.NotificationReadRequest(read=True)
+        self.assertTrue(payload.read)
 
     def test_program_enrollment_keeps_account_and_program_relationship(self):
         enrollment = ProgramEnrollment(

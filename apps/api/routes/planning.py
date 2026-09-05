@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from apps.api.database import get_db
 from apps.api.models import (
     StudentProfile, Program, ProgramPlanItem, Course, Job, JobFavorite,
-    RecommendationReport, LearningPlan, JobApplication, LearningRecord, ProgramEnrollment, User, utcnow,
+    Notification, RecommendationReport, LearningPlan, JobApplication, LearningRecord, ProgramEnrollment, User, utcnow,
 )
 from apps.api.routes.auth import get_current_user
 from services.planning.recommendation_engine import recommend
@@ -286,6 +286,16 @@ async def recommend_programs(
         recommendations=recommendations,
     )
     db.add(report)
+    notifications = (user.preferences or {}).get("notifications", {})
+    if notifications.get("推荐报告完成") is True:
+        from apps.api.routes.notifications import enqueue_notification
+        await enqueue_notification(
+            db,
+            user.id,
+            "recommendation",
+            "推荐报告已生成",
+            "你的辅修推荐报告已准备好，可以查看最新方向和风险提示。",
+        )
     await db.commit()
     await db.refresh(report)
     return {
