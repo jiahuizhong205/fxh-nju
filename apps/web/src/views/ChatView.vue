@@ -2,6 +2,7 @@
 import { ref, nextTick, onMounted, watch } from 'vue'
 import { useChatStore } from '../stores/chat'
 import ChatMessage from '../components/ChatMessage.vue'
+import BackButton from '../components/BackButton.vue'
 
 const store = useChatStore()
 const input = ref('')
@@ -73,11 +74,7 @@ function handleNewChat() {
     <!-- 对话区 -->
     <div class="chat-main">
       <header class="chat-head">
-        <router-link to="/" class="back">
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="m15 18-6-6 6-6"/>
-          </svg>
-        </router-link>
+        <BackButton fallback="/" />
         <h2>政策答疑</h2>
         <button class="btn-newchat" @click="handleNewChat">＋ 新对话</button>
         <button class="history-btn" @click="showSidebar = !showSidebar">☰</button>

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { fetchPreferences, savePreferences } from '../api/client'
+import BackButton from '../components/BackButton.vue'
 
 const settings = ref([
   { icon: '📚', label: '学习浇水提醒', desc: '每周学习计划推送', on: true },
@@ -47,11 +48,7 @@ async function save() {
 <template>
   <div class="page">
     <header class="page-head">
-      <router-link to="/profile" class="back">
-        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="m15 18-6-6 6-6"/>
-        </svg>
-      </router-link>
+      <BackButton fallback="/profile" />
       <h2>通知设置</h2>
     </header>
 

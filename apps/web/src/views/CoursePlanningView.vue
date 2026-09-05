@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { fetchPrograms, fetchPlan, type Program, type PlanResult, type PlanItem } from '../api/client'
+import BackButton from '../components/BackButton.vue'
 
 const programs = ref<Program[]>([])
 const program = ref('')
@@ -50,8 +51,11 @@ function termLabel(it: PlanItem): string {
 <template>
   <div class="planning">
     <header class="head">
-      <h2>复合培养年轮</h2>
-      <p>{{ program || '选择专业' }} 辅修方案图谱</p>
+      <BackButton fallback="/" />
+      <div>
+        <h2>复合培养年轮</h2>
+        <p>{{ program || '选择专业' }} 辅修方案图谱</p>
+      </div>
     </header>
 
     <section class="card picker">
@@ -93,6 +97,7 @@ function termLabel(it: PlanItem): string {
 
 <style scoped>
 .planning { padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-5); }
+.head { display: flex; align-items: center; gap: var(--space-3); }
 .head h2 { font-size: var(--text-2xl); font-weight: var(--weight-bold); color: var(--text-primary); }
 .head p { margin-top: var(--space-1); font-size: var(--text-sm); color: var(--text-muted); }
 

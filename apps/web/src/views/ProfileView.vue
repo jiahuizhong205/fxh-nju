@@ -3,6 +3,7 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { fetchProfile, logout, type StudentProfile } from '../api/client'
 import { useAuthStore } from '../stores/auth'
+import BackButton from '../components/BackButton.vue'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -38,6 +39,10 @@ const menu = [
 
 <template>
   <div class="profile">
+    <header class="page-head">
+      <BackButton fallback="/" />
+      <h2>我的花园</h2>
+    </header>
     <section class="user-card">
       <img class="avatar" src="/illustrations/avatar-wreath.png" alt="头像" />
       <div class="user-info">

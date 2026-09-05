@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { authHeaders, searchKnowledge, type SearchResult } from '../api/client'
+import BackButton from '../components/BackButton.vue'
 
 interface Document {
   id: string; title: string; trust_level: string; source_type: string
@@ -176,6 +177,10 @@ onMounted(loadDocs)
     </div>
 
     <div class="kb-main">
+      <div class="kb-title">
+        <BackButton fallback="/" />
+        <h2>知识森林</h2>
+      </div>
       <!-- 检索 -->
       <h3>知识检索</h3>
       <div class="search-box">
@@ -277,6 +282,8 @@ select { padding: 6px 8px; border: 1px solid #d4d4d8; border-radius: 6px; font-s
 }
 
 .kb-main { flex: 1; padding: 20px; overflow-y: auto; }
+.kb-title { display: flex; align-items: center; gap: var(--space-3); margin-bottom: 20px; }
+.kb-title h2 { font-size: var(--text-xl); color: var(--text-primary); }
 .kb-main h3 { margin-bottom: 12px; }
 
 table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }

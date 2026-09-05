@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { sendMessage } from '../api/client'
+import BackButton from '../components/BackButton.vue'
 
 const mode = ref<'enrolled' | 'self_study'>('enrolled')
 const question = ref('')
@@ -48,8 +49,13 @@ const selfStudyTopics = [
 <template>
   <div class="tutor-page">
     <div class="tutor-card">
-      <h2>漫步知识森林 🌲</h2>
-      <p class="level">LV.4 园艺学者</p>
+      <div class="tutor-title">
+        <BackButton fallback="/" />
+        <div>
+          <h2>漫步知识森林 🌲</h2>
+          <p class="level">LV.4 园艺学者</p>
+        </div>
+      </div>
       <div class="mode-switch">
         <button :class="{ active: mode === 'enrolled' }" @click="mode = 'enrolled'">
           在校辅修小径
@@ -93,6 +99,7 @@ const selfStudyTopics = [
 <style scoped>
 .tutor-page { flex: 1; display: flex; justify-content: center; padding: 32px 20px; overflow-y: auto; }
 .tutor-card { width: 100%; max-width: 660px; }
+.tutor-title { display: flex; align-items: flex-start; gap: var(--space-3); margin-bottom: 12px; }
 h2 { font-size: 1.3rem; margin-bottom: 4px; }
 .level { color: var(--brand-strong); font-size: 0.8rem; margin-bottom: 12px; }
 

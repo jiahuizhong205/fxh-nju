@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { changePassword } from '../api/client'
 import { useAuthStore } from '../stores/auth'
+import BackButton from '../components/BackButton.vue'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -44,11 +45,7 @@ async function submit() {
 <template>
   <div class="page">
     <header class="page-head">
-      <router-link to="/profile" class="back">
-        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="m15 18-6-6 6-6"/>
-        </svg>
-      </router-link>
+      <BackButton fallback="/profile" />
       <h2>修改密码</h2>
     </header>
 

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { submitFeedback } from '../api/client'
+import BackButton from '../components/BackButton.vue'
 
 const type = ref('功能建议')
 const content = ref('')
@@ -43,11 +44,7 @@ async function submit() {
 <template>
   <div class="page">
     <header class="page-head">
-      <router-link to="/settings" class="back">
-        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="m15 18-6-6 6-6"/>
-        </svg>
-      </router-link>
+      <BackButton fallback="/settings" />
       <h2>意见反馈</h2>
     </header>
 

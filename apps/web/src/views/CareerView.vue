@@ -3,6 +3,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import Icon from '../components/Icon.vue'
 import { fetchJobs, getFavoriteJobIds, saveFavoriteJobIds, type Job } from '../api/client'
+import BackButton from '../components/BackButton.vue'
 
 const router = useRouter()
 const jobs = ref<Job[]>([])
@@ -66,10 +67,13 @@ function jobTags(j: Job): string[] {
   <div class="career">
     <header class="head">
       <div class="head-top">
-        <h2>福小禾 · 职芽探测器 🍀</h2>
+        <BackButton fallback="/" />
+        <div class="head-copy">
+          <h2>福小禾 · 职芽探测器 🍀</h2>
+          <p class="sub">精准捕获“XX专业+辅修背景优先”的隐藏好岗 🔍</p>
+        </div>
         <span class="new-badge">{{ activeCount }}条有效岗位</span>
       </div>
-      <p class="sub">精准捕获“XX专业+辅修背景优先”的隐藏好岗 🔍</p>
     </header>
 
     <section class="tabs" aria-label="岗位类型">
@@ -119,7 +123,8 @@ function jobTags(j: Job): string[] {
 
 <style scoped>
 .career { padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-4); }
-.head-top { display: flex; justify-content: space-between; align-items: center; gap: var(--space-2); }
+.head-top { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--space-3); }
+.head-copy { flex: 1; min-width: 0; }
 .head-top h2 { font-size: var(--text-xl); font-weight: var(--weight-bold); color: var(--text-primary); }
 .new-badge { flex-shrink: 0; padding: 2px var(--space-2); background: var(--bg-pink-soft); color: var(--accent-purple); border-radius: var(--radius-full); font-size: var(--text-2xs); font-weight: var(--weight-semibold); }
 .sub { margin-top: var(--space-1); font-size: var(--text-xs); color: var(--text-muted); }

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import BackButton from '../components/BackButton.vue'
 
 const items = ref([
   { label: '清理图片缓存', desc: '已缓存的政策文件图片、课程表截图', size: '180 MB' },
@@ -15,11 +16,7 @@ function clearItem(it: (typeof items.value)[number]) {
 <template>
   <div class="page">
     <header class="page-head">
-      <router-link to="/settings" class="back">
-        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="m15 18-6-6 6-6"/>
-        </svg>
-      </router-link>
+      <BackButton fallback="/settings" />
       <h2>清除缓存</h2>
     </header>
 

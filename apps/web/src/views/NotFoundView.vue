@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router'
+import BackButton from '../components/BackButton.vue'
 
 const router = useRouter()
 </script>
 
 <template>
   <div class="not-found">
+    <BackButton fallback="/" />
     <div class="mark">🌱</div>
     <h2>这片花园还没有路</h2>
     <p>页面可能已经移动，或地址暂时不存在。</p>

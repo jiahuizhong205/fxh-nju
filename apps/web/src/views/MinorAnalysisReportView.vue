@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { fetchProfile, recommendPrograms, fetchPlan, type Recommendation, type PlanResult, type PlanItem } from '../api/client'
+import BackButton from '../components/BackButton.vue'
 
 const rec = ref<Recommendation | null>(null)
 const plan = ref<PlanResult | null>(null)
@@ -43,11 +44,7 @@ function termLabel(it: PlanItem): string {
 <template>
   <div class="page">
     <header class="page-head">
-      <router-link to="/recommend" class="back">
-        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="m15 18-6-6 6-6"/>
-        </svg>
-      </router-link>
+      <BackButton fallback="/recommend" />
       <h2>辅修推荐分析报告</h2>
     </header>
 

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import BackButton from '../components/BackButton.vue'
 
 const accounts = ref([
   { name: '小林同学', major: '新闻学院 · 新闻学', current: true, star: true, avatar: '/illustrations/avatar-wreath.png' },
@@ -15,11 +16,7 @@ function switchTo(acc: (typeof accounts.value)[number]) {
 <template>
   <div class="page">
     <header class="page-head">
-      <router-link to="/settings" class="back">
-        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="m15 18-6-6 6-6"/>
-        </svg>
-      </router-link>
+      <BackButton fallback="/settings" />
       <h2>切换账号</h2>
     </header>
 
