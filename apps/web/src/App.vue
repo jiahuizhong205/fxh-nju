@@ -20,7 +20,7 @@ function isActive(path: string) {
     <RouterView />
   </div>
   <div v-else class="app">
-    <header v-if="route.name !== 'recommend' && route.name !== 'course-planning'" class="app-header">
+    <header v-if="route.name !== 'recommend' && route.name !== 'course-planning' && route.name !== 'job-detail'" class="app-header">
       <h1>福小禾</h1>
       <span class="subtitle">南大复合型人才学习助手</span>
     </header>
