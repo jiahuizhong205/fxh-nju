@@ -13,6 +13,7 @@ const groups = [
   {
     title: '🔔 通知与提醒',
     items: [
+      { to: '/settings/notification', label: '通知设置', desc: '🌸 风铃要响几声？' },
       { to: '/settings/learning-reminder', label: '学习提醒频次', desc: '💧 浇水节奏' },
       { to: '/settings/job-push', label: '岗位推送偏好', desc: '📬 新花开在哪片地？' },
     ],
@@ -25,17 +26,16 @@ const groups = [
     ],
   },
   {
-    title: '🏺 数据与存储',
+    title: '🌿 隐私与安全',
     items: [
-      { to: '/settings/clear-cache', label: '清除缓存', desc: '🍂 扫走枯叶' },
+      { to: '/settings/learning-progress', label: '学习进度可见范围', desc: '👀 谁可以逛我的花园' },
+      { to: '/settings/change-password', label: '修改密码', desc: '🔐 换一把花园钥匙' },
     ],
   },
   {
-    title: '🌿 花园工具',
+    title: '🏺 数据与存储',
     items: [
-      { to: '/settings/learning-progress', label: '我的学习进度', desc: '👀 谁可以逛我的花园' },
-      { to: '/settings/change-password', label: '修改密码', desc: '🔐 换一把花园钥匙' },
-      { to: '/settings/notification', label: '通知设置', desc: '🌸 风铃要响几声？' },
+      { to: '/settings/clear-cache', label: '清除缓存', desc: '🍂 扫走枯叶' },
       { to: '/settings/data-sync', label: '数据同步', desc: '☁️ 种子备份云' },
     ],
   },
@@ -55,12 +55,11 @@ const groups = [
       <BackButton fallback="/profile" />
       <h2>花园工具箱</h2>
     </header>
-    <div class="illus"><img src="/illustrations/settings-header.png" alt="" /></div>
     <p class="page-sub">调整你的成长环境 🌿</p>
 
     <section v-for="g in groups" :key="g.title" class="group-wrap">
-      <h3 class="group-title">{{ g.title }}</h3>
       <div class="group">
+        <h3 class="group-title">{{ g.title }}</h3>
         <router-link v-for="item in g.items" :key="item.to" :to="item.to" class="setting-row">
           <span class="row-main">
             <span class="row-label">{{ item.label }}</span>
@@ -78,12 +77,10 @@ const groups = [
 
 <style scoped>
 .page-sub { font-size: var(--text-sm); color: var(--text-muted); margin-bottom: var(--space-2); }
-.illus { display: flex; justify-content: center; margin: var(--space-2) 0 var(--space-3); }
-.illus img { width: 100%; max-width: 390px; height: auto; }
 .group-wrap { margin-bottom: var(--space-4); }
-.group-title { font-size: var(--text-sm); font-weight: var(--weight-semibold); color: var(--text-secondary); margin-bottom: var(--space-2); padding-left: var(--space-1); }
-.group { background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; }
-.setting-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); padding: var(--space-4); text-decoration: none; border-bottom: 1px solid var(--bg-subtle); }
+.group { background: var(--bg-green-faint); border: 1px solid var(--bg-green-soft); border-radius: var(--radius-lg); padding: var(--space-3) var(--space-4); overflow: hidden; }
+.group-title { padding: var(--space-1) 0 var(--space-2); font-size: var(--text-base); font-weight: var(--weight-semibold); color: var(--accent-purple); }
+.setting-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); padding: var(--space-3) 0; background: transparent; text-decoration: none; border-bottom: 1px solid var(--bg-green-soft); }
 .setting-row:last-child { border-bottom: none; }
 .row-main { display: flex; flex-direction: column; gap: 2px; }
 .row-label { font-size: var(--text-base); color: var(--text-primary); font-weight: var(--weight-medium); }
