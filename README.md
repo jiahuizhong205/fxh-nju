@@ -80,6 +80,20 @@ uvicorn apps.api.main:app --reload --port 8000
 cd apps/web && npm install && npm run dev
 ```
 
+### 可选：启动通知 worker
+
+通知 worker 负责按账号生成到期学习提醒，并投递已经入队的外部通知。未配置
+`NOTIFICATION_PROVIDER_URL` 时不会访问外部网络，外部通知会保持 `queued`，因此
+mock 开发不需要短信、邮件或本地大模型。
+
+```bash
+PYTHONPATH=. python scripts/notification_worker.py
+```
+
+Docker Compose 已包含同一个 `notification-worker` 服务；如需接入自有 webhook
+供应商，可在 `.env` 中配置 `NOTIFICATION_PROVIDER_URL`、可选的
+`NOTIFICATION_PROVIDER_API_KEY` 和 `NOTIFICATION_WORKER_INTERVAL_SECONDS`。
+
 ## 接入真实 LLM / Embedding（可选）
 
 默认 `MOCK_LLM=true`，后端对问答走 mock 回复，且 mock 模式不会加载本地模型，embedding 使用确定性回退向量，**无需任何 LLM 或外部服务** 即可跑通确定性功能（画像、推荐、课程规划、岗位、落库、检索端点、安全策略）。要启用真实智能问答与向量检索，接入一个 OpenAI 兼容服务后改 `.env` 并重启后端：

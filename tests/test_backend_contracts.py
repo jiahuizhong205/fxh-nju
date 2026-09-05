@@ -674,6 +674,88 @@ class BackendContractTests(unittest.TestCase):
         self.assertEqual(notification.status, "sent")
         self.assertIsNotNone(notification.sent_at)
 
+    def test_notification_provider_payload_contains_only_delivery_contract_fields(self):
+        notification = Notification(
+            id="00000000-0000-0000-0000-000000000001",
+            user_id="00000000-0000-0000-0000-000000000002",
+            category="recommendation",
+            title="推荐报告已生成",
+            body="你的推荐报告已准备好",
+            channel="webhook",
+        )
+        payload = notifications._notification_provider_payload(notification)
+        self.assertEqual(payload["notification_id"], "00000000-0000-0000-0000-000000000001")
+        self.assertEqual(payload["user_id"], "00000000-0000-0000-0000-000000000002")
+        self.assertEqual(payload["channel"], "webhook")
+        self.assertNotIn("token", payload)
+        self.assertNotIn("password", payload)
+
+    def test_notification_provider_without_url_keeps_external_item_queued(self):
+        notification = Notification(
+            channel="email",
+            status="queued",
+            scheduled_at=utcnow() - timedelta(seconds=1),
+        )
+        previous_url = notifications.settings.notification_provider_url
+        notifications.settings.notification_provider_url = ""
+        try:
+            delivered = asyncio.run(notifications._deliver_external_via_provider(notification))
+        finally:
+            notifications.settings.notification_provider_url = previous_url
+        self.assertFalse(delivered)
+        self.assertEqual(notification.status, "queued")
+        self.assertEqual(notification.retry_count or 0, 0)
+
+    def test_notification_provider_success_marks_external_item_sent(self):
+        notification = Notification(
+            id="00000000-0000-0000-0000-000000000003",
+            user_id="00000000-0000-0000-0000-000000000004",
+            category="job_push",
+            title="新岗位",
+            body="有新的岗位推荐",
+            channel="webhook",
+            status="queued",
+            scheduled_at=utcnow() - timedelta(seconds=1),
+        )
+        previous_url = notifications.settings.notification_provider_url
+        previous_key = notifications.settings.notification_provider_api_key
+        notifications.settings.notification_provider_url = "https://notify.example.test/send"
+        notifications.settings.notification_provider_api_key = "test-key"
+        seen = {}
+
+        class FakeResponse:
+            def raise_for_status(self):
+                return None
+
+        class FakeClient:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *_args):
+                return None
+
+            async def post(self, url, json, headers):
+                seen.update({"url": url, "json": json, "headers": headers})
+                return FakeResponse()
+
+        previous_client = notifications.httpx.AsyncClient
+        notifications.httpx.AsyncClient = lambda **_kwargs: FakeClient()
+        try:
+            delivered = asyncio.run(notifications._deliver_external_via_provider(notification))
+        finally:
+            notifications.httpx.AsyncClient = previous_client
+            notifications.settings.notification_provider_url = previous_url
+            notifications.settings.notification_provider_api_key = previous_key
+        self.assertTrue(delivered)
+        self.assertEqual(notification.status, "sent")
+        self.assertEqual(seen["url"], "https://notify.example.test/send")
+        self.assertEqual(seen["headers"]["Authorization"], "Bearer test-key")
+
+    def test_notification_worker_script_exposes_single_cycle_entrypoint(self):
+        from scripts import notification_worker
+
+        self.assertTrue(callable(notification_worker.run_once))
+
     def test_notification_preference_defaults_match_notification_page(self):
         user = User(preferences={})
         self.assertTrue(notifications._notification_enabled(user, "学习浇水提醒"))

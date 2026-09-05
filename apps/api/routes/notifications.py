@@ -3,11 +3,13 @@
 import uuid
 from datetime import datetime, timedelta
 
+import httpx
 from fastapi import APIRouter, Depends, Query, HTTPException
 from pydantic import BaseModel, StrictBool
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from apps.api.config import settings
 from apps.api.database import get_db
 from apps.api.models import Notification, User, utcnow
 from apps.api.routes.auth import get_current_user
@@ -83,6 +85,92 @@ def _deliver_external(notification: Notification, sender, now: datetime | None =
     return True
 
 
+def _notification_provider_payload(notification: Notification) -> dict:
+    """构造给外部通知 provider 的最小 payload，不携带账号凭据或联系方式。"""
+    return {
+        "notification_id": str(notification.id),
+        "user_id": str(notification.user_id),
+        "category": notification.category,
+        "title": notification.title,
+        "body": notification.body,
+        "channel": notification.channel,
+    }
+
+
+async def _deliver_external_via_provider(
+    notification: Notification,
+    now: datetime | None = None,
+) -> bool:
+    """通过可选 webhook provider 投递一条外部通知，并持久化重试状态。"""
+    now = now or utcnow()
+    if notification.channel == "in_app" or notification.status != "queued":
+        return False
+    if notification.scheduled_at and notification.scheduled_at > now:
+        return False
+    provider_url = settings.notification_provider_url.strip()
+    if not provider_url:
+        return False
+
+    notification.retry_count = (notification.retry_count or 0) + 1
+    try:
+        headers = {"Content-Type": "application/json"}
+        if settings.notification_provider_api_key:
+            headers["Authorization"] = f"Bearer {settings.notification_provider_api_key}"
+        async with httpx.AsyncClient(
+            timeout=settings.notification_provider_timeout_seconds
+        ) as client:
+            response = await client.post(
+                provider_url,
+                json=_notification_provider_payload(notification),
+                headers=headers,
+            )
+            response.raise_for_status()
+    except Exception as exc:  # provider boundary: persist failure, never leak it to the user
+        notification.last_error = str(exc)[:2000]
+        if notification.retry_count >= MAX_EXTERNAL_NOTIFICATION_RETRIES:
+            notification.status = "failed"
+        else:
+            notification.scheduled_at = now + timedelta(
+                minutes=2 ** (notification.retry_count - 1)
+            )
+        notification.updated_at = now
+        return False
+
+    notification.status = "sent"
+    notification.sent_at = now
+    notification.last_error = ""
+    notification.updated_at = now
+    return True
+
+
+async def dispatch_external_notifications(
+    db: AsyncSession,
+    now: datetime | None = None,
+    limit: int = 100,
+) -> int:
+    """处理到期的外部通知；无 provider 配置时安全空转。"""
+    now = now or utcnow()
+    result = await db.execute(
+        select(Notification)
+        .where(
+            Notification.channel != "in_app",
+            Notification.status == "queued",
+            or_(Notification.scheduled_at.is_(None), Notification.scheduled_at <= now),
+        )
+        .order_by(Notification.created_at)
+        .limit(limit)
+    )
+    items = result.scalars().all()
+    if not settings.notification_provider_url.strip() or not items:
+        return 0
+    processed = 0
+    for item in items:
+        await _deliver_external_via_provider(item, now=now)
+        processed += 1
+    await db.commit()
+    return processed
+
+
 def _notification_enabled(user: User, key: str) -> bool:
     """按通知设置页的默认值判断某个事件是否允许入队。"""
     configured = (user.preferences or {}).get("notifications", {})
@@ -143,6 +231,22 @@ async def enqueue_due_learning_reminder(
         "该给学习计划浇水了",
         "打开你的课程规划，完成今天的一小步学习任务吧。",
     )
+
+
+async def enqueue_due_learning_reminders(
+    db: AsyncSession,
+    now: datetime | None = None,
+    limit: int = 1000,
+) -> int:
+    """worker 扫描账号并生成到期学习提醒，按自然日幂等。"""
+    result = await db.execute(select(User).order_by(User.created_at).limit(limit))
+    created = 0
+    for user in result.scalars().all():
+        if await enqueue_due_learning_reminder(db, user, now=now):
+            created += 1
+    if created:
+        await db.commit()
+    return created
 
 
 async def _deliver_due_in_app(db: AsyncSession, user_id, limit: int = 100) -> int:
