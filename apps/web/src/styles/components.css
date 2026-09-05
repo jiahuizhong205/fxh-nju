@@ -98,9 +98,9 @@
   user-select: none;
 }
 .chip.selected {
-  background: var(--brand-strong);
-  border-color: var(--brand-strong);
-  color: #fff;
+  background: var(--bg-green-soft);
+  border-color: var(--brand);
+  color: var(--brand-strong);
 }
 
 /* 设置行 */
@@ -168,7 +168,7 @@
 .btn-primary {
   width: 100%;
   padding: var(--space-3);
-  background: var(--brand-strong);
+  background: var(--brand-gradient);
   color: #fff;
   border: none;
   border-radius: var(--radius-md);

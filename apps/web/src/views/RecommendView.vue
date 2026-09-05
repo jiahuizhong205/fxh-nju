@@ -141,7 +141,7 @@ function matchFlowers(score: number) {
 .prompt-copy span { color: var(--text-muted); font-size: var(--text-xs); }
 .prompt-action { color: var(--accent-purple); font-size: var(--text-xs); font-weight: var(--weight-semibold); text-decoration: none; white-space: nowrap; }
 
-.btn-recommend { width: 100%; padding: var(--space-3); border: 0; border-radius: var(--radius-md); background: var(--brand-strong); color: #fff; font-size: var(--text-base); font-weight: var(--weight-semibold); cursor: pointer; font-family: inherit; }
+.btn-recommend { width: 100%; padding: var(--space-3); border: 0; border-radius: var(--radius-md); background: var(--brand-gradient); color: #fff; font-size: var(--text-base); font-weight: var(--weight-semibold); cursor: pointer; font-family: inherit; }
 .btn-recommend:disabled { background: var(--bg-green-soft); cursor: not-allowed; }
 .error-msg { color: var(--accent-purple); font-size: var(--text-sm); }
 

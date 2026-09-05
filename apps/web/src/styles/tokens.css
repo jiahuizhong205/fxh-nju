@@ -3,6 +3,7 @@
   /* 品牌色（绿系） */
   --brand: #7faf8a;          /* 主绿，208 处 */
   --brand-strong: #5a7a6b;   /* 深绿，182 处 */
+  --brand-gradient: linear-gradient(135deg, #8ebe99 0%, #6f907d 100%);
   --brand-ink: #2f3b35;      /* 墨绿，主文字/深色块，234 处 */
   --brand-deep: #2b3a31;     /* 更深绿，18 处 */
 

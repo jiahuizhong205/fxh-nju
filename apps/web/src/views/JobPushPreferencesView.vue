@@ -71,7 +71,7 @@ function toggle(list: string[], item: string) {
 .card-title { font-size: var(--text-base); font-weight: var(--weight-semibold); color: var(--text-primary); margin-bottom: var(--space-3); }
 .type-list { display: flex; flex-direction: column; gap: var(--space-2); }
 .type { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3); border: 1px solid var(--border); background: #fff; border-radius: var(--radius-md); cursor: pointer; font-family: inherit; text-align: left; }
-.type.selected { border-color: var(--brand); background: var(--bg-green-faint); }
+.type.selected { border-color: var(--brand); background: var(--bg-green-soft); }
 .type-icon { font-size: var(--text-xl); }
 .type-label { font-size: var(--text-sm); color: var(--text-primary); }
 .chips { display: flex; flex-wrap: wrap; gap: var(--space-2); }

@@ -131,7 +131,7 @@ function jobTags(j: Job): string[] {
 
 .tabs { display: flex; gap: var(--space-2); }
 .tab { flex: 1; padding: var(--space-2); border: 1px solid var(--border); background: var(--bg-surface); border-radius: var(--radius-md); font-size: var(--text-sm); color: var(--text-secondary); cursor: pointer; font-family: inherit; }
-.tab.on { background: var(--brand-strong); color: #fff; border-color: var(--brand-strong); }
+.tab.on { background: var(--bg-green-soft); color: var(--brand-strong); border-color: var(--brand); }
 
 .filters { display: flex; gap: var(--space-2); }
 .filter { min-width: 0; flex: 1; padding: var(--space-2) var(--space-3); border: 1px solid var(--border); background: var(--bg-surface); border-radius: var(--radius-md); font-size: var(--text-sm); color: var(--text-secondary); cursor: pointer; font-family: inherit; outline: none; }
@@ -153,7 +153,7 @@ function jobTags(j: Job): string[] {
 .tag { padding: 2px var(--space-2); background: var(--bg-green-faint); color: var(--brand-strong); border-radius: var(--radius-sm); font-size: var(--text-2xs); }
 .job-actions { display: flex; gap: var(--space-2); margin-top: var(--space-1); }
 .action { flex: 1; padding: var(--space-2); border: 1px solid var(--border); background: #fff; border-radius: var(--radius-md); font-size: var(--text-sm); color: var(--text-secondary); cursor: pointer; font-family: inherit; }
-.action.primary { background: var(--brand-strong); color: #fff; border-color: var(--brand-strong); }
+.action.primary { background: var(--brand-gradient); color: #fff; border-color: transparent; }
 
 .btn-resume { width: 100%; padding: var(--space-3); border: 1px dashed var(--brand); background: var(--bg-green-faint); color: var(--brand-strong); border-radius: var(--radius-md); font-size: var(--text-sm); font-weight: var(--weight-semibold); cursor: pointer; font-family: inherit; }
 .empty { text-align: center; color: var(--text-muted); font-size: var(--text-sm); padding: var(--space-4); }

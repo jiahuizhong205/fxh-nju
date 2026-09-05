@@ -108,7 +108,7 @@ h2 { font-size: 1.3rem; margin-bottom: 4px; }
   flex: 1; padding: 10px; border: 1px solid #d4d4d8; background: #fff;
   border-radius: 8px; cursor: pointer; font-size: 0.9rem;
 }
-.mode-switch button.active { background: #5a7a6b; color: #fff; border-color: #5a7a6b; }
+.mode-switch button.active { background: var(--bg-green-soft); color: var(--brand-strong); border-color: var(--brand); }
 .mode-desc { color: #6b7280; font-size: 0.85rem; margin-bottom: 16px; }
 
 .topic-suggestions { margin-bottom: 16px; }

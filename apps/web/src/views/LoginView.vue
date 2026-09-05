@@ -205,7 +205,7 @@ async function submit() {
   align-items: center;
   justify-content: center;
   gap: 14px;
-  background: linear-gradient(105deg, #82b58e, #5f8271);
+  background: var(--brand-gradient);
   box-shadow: 0 12px 24px rgba(91, 126, 103, 0.22);
   font-size: var(--text-lg);
   letter-spacing: 0.08em;

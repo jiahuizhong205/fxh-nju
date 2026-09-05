@@ -268,7 +268,7 @@ onMounted(loadDocs)
   flex: 1; padding: 4px 8px; font-size: 0.78rem; border: 1px solid #d4d4d8;
   background: #fff; border-radius: 4px; cursor: pointer;
 }
-.filter-btns button.active { background: #5a7a6b; color: #fff; border-color: #5a7a6b; }
+.filter-btns button.active { background: var(--bg-green-soft); color: var(--brand-strong); border-color: var(--brand); }
 select { padding: 6px 8px; border: 1px solid #d4d4d8; border-radius: 6px; font-size: 0.85rem; width: 100%; }
 
 .version-section { border-top: 1px solid #e5e7eb; padding-top: 12px; }
@@ -322,7 +322,7 @@ th { color: #6b7280; font-weight: 500; font-size: 0.8rem; }
 
 .upload-mode { display: flex; gap: 6px; }
 .upload-mode button { padding: 6px 14px; border: 1px solid #d4d4d8; background: #fff; border-radius: 6px; cursor: pointer; }
-.upload-mode button.active { background: #5a7a6b; border-color: #5a7a6b; color: #fff; }
+.upload-mode button.active { background: var(--bg-green-soft); border-color: var(--brand); color: var(--brand-strong); }
 .file-picker { padding: 18px; border: 1px dashed #a1a1aa; border-radius: 8px; color: #6b7280; cursor: pointer; }
 .file-picker input { display: block; margin-top: 8px; }
 

@@ -115,7 +115,7 @@ async function save() {
 
 .moods { display: flex; gap: var(--space-3); }
 .mood { flex: 1; display: flex; flex-direction: column; align-items: center; gap: var(--space-2); padding: var(--space-3); border: 1px solid var(--border); background: var(--bg-surface); border-radius: var(--radius-md); cursor: pointer; font-family: inherit; }
-.mood.active { border-color: var(--brand); background: var(--bg-green-faint); }
+.mood.active { border-color: var(--brand); background: var(--bg-green-soft); }
 .mood-icon { font-size: var(--text-2xl); }
 .mood-name { font-size: var(--text-sm); color: var(--text-secondary); }
 .mood.active .mood-name { color: var(--brand-strong); font-weight: var(--weight-semibold); }
