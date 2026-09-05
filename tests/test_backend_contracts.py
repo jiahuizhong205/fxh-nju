@@ -19,6 +19,7 @@ from apps.api.routes import knowledge
 from apps.api.routes import planning
 from apps.api.routes import preferences
 from apps.api.routes import profile
+from services.planning.recommendation_engine import hard_filter
 
 
 class _CommitOnlyDb:
@@ -458,6 +459,28 @@ class BackendContractTests(unittest.TestCase):
         )
         self.assertEqual(history.password_hash, "old-hash")
         self.assertEqual(history.salt, "old-salt")
+
+    def test_completed_math_course_satisfies_math_prerequisite_signal(self):
+        result = hard_filter(
+            {
+                "name": "计算机科学与技术",
+                "campus": "仙林校区",
+                "required_math": True,
+                "required_math_level": "高等数学（一）",
+                "semesters_needed": 4,
+                "total_credits": 45,
+            },
+            {
+                "major": "新闻学",
+                "grade": "大二",
+                "campus": "仙林校区",
+                "math_willingness": False,
+                "certificate_goal": "degree",
+                "completed_courses": ["高等数学（一）"],
+            },
+        )
+        self.assertTrue(result.passed)
+        self.assertNotIn("不接受修高数", " ".join(result.reasons))
 
 
 if __name__ == "__main__":

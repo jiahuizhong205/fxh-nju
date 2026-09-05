@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from apps.api.database import get_db
 from apps.api.models import (
     StudentProfile, Program, ProgramPlanItem, Course, Job, JobFavorite,
-    RecommendationReport, LearningPlan, JobApplication, ProgramEnrollment, User, utcnow,
+    RecommendationReport, LearningPlan, JobApplication, LearningRecord, ProgramEnrollment, User, utcnow,
 )
 from apps.api.routes.auth import get_current_user
 from services.planning.recommendation_engine import recommend
@@ -64,6 +64,13 @@ async def _latest_profile(db: AsyncSession, user_id) -> dict | None:
     p = result.scalar_one_or_none()
     if not p:
         return None
+    records_result = await db.execute(
+        select(LearningRecord).where(
+            LearningRecord.user_id == user_id,
+            LearningRecord.status == "completed",
+        )
+    )
+    completed_records = records_result.scalars().all()
     return {
         "major": p.major, "grade": p.grade, "campus": p.campus,
         "interests": p.interests or [], "strengths": p.strengths or [],
@@ -74,6 +81,8 @@ async def _latest_profile(db: AsyncSession, user_id) -> dict | None:
         "certificate_goal": p.certificate_goal,
         "schedule_preferences": p.schedule_preferences or {},
         "version": p.version,
+        "completed_courses": [record.course_name for record in completed_records],
+        "completed_credits": sum(record.credits for record in completed_records),
     }
 
 
@@ -171,6 +180,34 @@ async def program_participants(program_name: str, db: AsyncSession = Depends(get
     if not await db.get(Program, program_name):
         raise HTTPException(status_code=404, detail=f"未找到「{program_name}」")
     return {"program": program_name, "participant_count": await _participant_count(db, program_name)}
+
+
+@router.get("/programs/{program_name}/prerequisites")
+async def program_prerequisites(
+    program_name: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    program = await db.get(Program, program_name)
+    if not program:
+        raise HTTPException(status_code=404, detail=f"未找到「{program_name}」")
+    records_result = await db.execute(
+        select(LearningRecord).where(
+            LearningRecord.user_id == user.id,
+            LearningRecord.status == "completed",
+        )
+    )
+    completed = [record.course_name for record in records_result.scalars().all()]
+    math_completed = any("高等数学" in course or "高数" in course for course in completed)
+    requirements = []
+    if program.required_math:
+        requirements.append({
+            "type": "math",
+            "name": program.required_math_level,
+            "completed": math_completed,
+            "evidence": [course for course in completed if "高等数学" in course or "高数" in course],
+        })
+    return {"program": program_name, "requirements": requirements}
 
 
 @router.put("/programs/{program_name}/enrollment")

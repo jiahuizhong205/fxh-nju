@@ -98,8 +98,10 @@ def hard_filter(program: dict, profile: dict) -> FilterResult:
         if "苏州" in prog_campus or "苏州" in user_campus:
             reasons.append(f"{prog_campus}与{user_campus}不可通勤")
 
-    # 数学门槛
-    if program.get("required_math") and not profile.get("math_willingness", False):
+    # 数学门槛：已修并通过高数时，不再要求用户重新确认愿修意愿。
+    completed_courses = profile.get("completed_courses", [])
+    math_completed = any("高等数学" in course or "高数" in course for course in completed_courses)
+    if program.get("required_math") and not profile.get("math_willingness", False) and not math_completed:
         certificate = profile.get("certificate_goal", "")
         if certificate == "degree":
             reasons.append(f"需要修读{program['required_math_level']}，但用户不接受修高数")
@@ -156,7 +158,11 @@ def score_program(program: dict, profile: dict) -> ScoreResult:
     # prerequisite_readiness (0.20) — 文科生选理科扣分
     arts_majors = ["文学", "历史", "哲学", "外语", "新闻", "中文", "汉语言", "社会学"]
     is_arts = any(m in profile.get("major", "") for m in arts_majors)
-    if program.get("required_math") and is_arts:
+    completed_courses = profile.get("completed_courses", [])
+    math_completed = any("高等数学" in course or "高数" in course for course in completed_courses)
+    if program.get("required_math") and math_completed:
+        scores["prerequisite_readiness"] = 0.9
+    elif program.get("required_math") and is_arts:
         scores["prerequisite_readiness"] = 0.2
         risks.append(f"文科跨理科辅修，前置知识差距大")
     elif program.get("required_math") and not is_arts:
