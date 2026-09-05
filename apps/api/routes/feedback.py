@@ -17,6 +17,13 @@ router = APIRouter()
 
 ATTACHMENT_CONTENT_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif", "application/pdf"}
 ATTACHMENT_MAX_BYTES = 5 * 1024 * 1024
+ATTACHMENT_SIGNATURES = {
+    "image/jpeg": lambda content: content.startswith(b"\xff\xd8\xff"),
+    "image/png": lambda content: content.startswith(b"\x89PNG\r\n\x1a\n"),
+    "image/webp": lambda content: content.startswith(b"RIFF") and content[8:12] == b"WEBP",
+    "image/gif": lambda content: content.startswith((b"GIF87a", b"GIF89a")),
+    "application/pdf": lambda content: content.startswith(b"%PDF-"),
+}
 
 
 class FeedbackCreate(BaseModel):
@@ -33,6 +40,9 @@ def _validate_attachment(content_type: str | None, content: bytes) -> None:
         raise ValueError("附件文件不能为空")
     if len(content) > ATTACHMENT_MAX_BYTES:
         raise ValueError("单个附件不能超过 5 MB")
+    signature_check = ATTACHMENT_SIGNATURES[content_type]
+    if not signature_check(content):
+        raise ValueError("附件内容与声明的文件类型不匹配")
 
 
 @router.post("/feedback")

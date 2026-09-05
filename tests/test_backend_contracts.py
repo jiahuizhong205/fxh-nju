@@ -448,14 +448,16 @@ class BackendContractTests(unittest.TestCase):
         self.assertEqual(avatar.size_bytes, 9)
 
     def test_feedback_attachment_validates_upload_and_keeps_digest(self):
-        feedback._validate_attachment("image/png", b"png-bytes")
+        feedback._validate_attachment("image/png", b"\x89PNG\r\n\x1a\nvalid")
         with self.assertRaises(ValueError):
             feedback._validate_attachment("text/plain", b"not-image")
+        with self.assertRaises(ValueError):
+            feedback._validate_attachment("image/png", b"not-a-png")
         attachment = FeedbackAttachment(
             filename="screen.png",
             content_type="image/png",
-            data=b"png-bytes",
-            size_bytes=9,
+            data=b"\x89PNG\r\n\x1a\nvalid",
+            size_bytes=13,
             sha256="a" * 64,
         )
         self.assertEqual(attachment.filename, "screen.png")
