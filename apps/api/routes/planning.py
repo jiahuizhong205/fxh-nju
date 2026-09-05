@@ -24,7 +24,7 @@ from services.planning.recommendation_engine import recommend
 from services.planning.course_planner import generate_plan, PROGRAM_PLANS
 from services.planning.career_engine import SAMPLE_JOBS, build_career_outcomes, match_jobs
 from services.planning.eligibility import evaluate_program_eligibility
-from services.planning.schedule_conflicts import build_schedule_options, detect_schedule_conflicts
+from services.planning.schedule_conflicts import auto_select_schedule, build_schedule_options, detect_schedule_conflicts
 from services.rag.knowledge_graph import get_skill_pathways
 
 router = APIRouter()
@@ -773,6 +773,39 @@ async def program_schedule_options(
         "program": name,
         "campus": profile.get("campus", ""),
         **build_schedule_options(plan_items, offerings, profile.get("campus", "")),
+    }
+
+
+@router.post("/programs/{name}/schedule-auto")
+async def auto_schedule_program(
+    name: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """根据当前画像从真实教学班候选中自动选择一组排课。"""
+    prog = await db.get(Program, name)
+    if not prog:
+        raise HTTPException(status_code=404, detail=f"未找到「{name}」")
+    db_plans = await _load_plans(db)
+    plans = {**PROGRAM_PLANS, **db_plans}
+    plan_items = plans.get(name, [])
+    course_result = await db.execute(
+        select(Course).where(Course.department == prog.department).order_by(Course.course_name)
+    )
+    offerings = [_course_dict(course) for course in course_result.scalars().all()]
+    profile = await _latest_profile(db, user.id) or {}
+    preferences = profile.get("schedule_preferences", {})
+    options = build_schedule_options(plan_items, offerings, profile.get("campus", ""))
+    selection = auto_select_schedule(
+        options["courses"],
+        user_campus=profile.get("campus", ""),
+        time_preferences=preferences.get("time_slots", []),
+        conflict_strategies=preferences.get("conflict_strategies", []),
+    )
+    return {
+        "program": name,
+        "profile_version": profile.get("version", 0),
+        **selection,
     }
 
 

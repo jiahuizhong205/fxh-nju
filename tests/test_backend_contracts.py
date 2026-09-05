@@ -30,7 +30,7 @@ from apps.api.routes import feedback
 from packages.contracts.schemas import ChatRequest
 from services.planning.recommendation_engine import hard_filter, recommend
 from services.planning.eligibility import evaluate_program_eligibility
-from services.planning.schedule_conflicts import detect_schedule_conflicts
+from services.planning.schedule_conflicts import auto_select_schedule, detect_schedule_conflicts
 from services.planning.schedule_conflicts import build_schedule_options
 from services.planning.career_engine import build_career_outcomes
 from services.rag.knowledge_graph import get_learning_pathways, get_node_resources, get_skill_pathways
@@ -512,6 +512,35 @@ class BackendContractTests(unittest.TestCase):
             user_campus="仙林校区",
         )
         self.assertEqual(options["courses"][0]["offerings"][0]["teaching_class_id"], "OPEN")
+
+    def test_auto_schedule_selects_non_conflicting_preferred_offerings(self):
+        result = auto_select_schedule(
+            [
+                {"course_name": "传播学概论", "required_credits": 3, "offerings": [
+                    {"teaching_class_id": "C-1", "campus": "鼓楼校区", "schedule": [{"day": 1, "start": 3, "end": 4}]},
+                    {"teaching_class_id": "C-2", "campus": "仙林校区", "schedule": [{"day": 2, "start": 3, "end": 4}]},
+                ]},
+                {"course_name": "新闻编辑学", "required_credits": 3, "offerings": [
+                    {"teaching_class_id": "N-1", "campus": "仙林校区", "schedule": [{"day": 1, "start": 3, "end": 4}]},
+                    {"teaching_class_id": "N-2", "campus": "仙林校区", "schedule": [{"day": 2, "start": 5, "end": 6}]},
+                ]},
+            ],
+            user_campus="仙林校区",
+        )
+        self.assertTrue(result["feasible"])
+        self.assertEqual(result["selected_teaching_class_ids"], ["C-2", "N-1"])
+        self.assertEqual(result["conflicts"], [])
+
+    def test_auto_schedule_reports_infeasible_when_every_combination_conflicts(self):
+        result = auto_select_schedule(
+            [
+                {"course_name": "课程甲", "offerings": [{"teaching_class_id": "A-1", "schedule": [{"day": 1, "start": 1, "end": 2}]}]},
+                {"course_name": "课程乙", "offerings": [{"teaching_class_id": "B-1", "schedule": [{"day": 1, "start": 1, "end": 3}]}]},
+            ]
+        )
+        self.assertFalse(result["feasible"])
+        self.assertEqual(result["selected_teaching_class_ids"], ["A-1", "B-1"])
+        self.assertEqual(len(result["conflicts"]), 1)
 
     def test_saved_plan_csv_export_keeps_traceable_plan_metadata(self):
         plan = LearningPlan(
