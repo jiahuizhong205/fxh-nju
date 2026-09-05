@@ -1,8 +1,10 @@
 """账号附属数据 API——联系方式和学习记录。"""
 
 import re
+import hashlib
+import secrets
 import uuid
-from datetime import date
+from datetime import date, timedelta
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -11,7 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.api.database import get_db
-from apps.api.models import LearningActivity, LearningPlan, LearningRecord, Program, User, UserContact, utcnow
+from apps.api.models import LearningActivity, LearningPlan, LearningRecord, Program, User, UserContact, VerificationChallenge, utcnow
 from apps.api.routes.auth import get_current_user
 
 router = APIRouter()
@@ -62,6 +64,10 @@ class LearningActivityInput(BaseModel):
     source: str = Field(default="manual", max_length=50)
 
 
+class VerificationCodeInput(BaseModel):
+    code: str = Field(min_length=6, max_length=6, pattern=r"^\d{6}$")
+
+
 def _normalize_contact(contact_type: str, value: str) -> str:
     value = value.strip()
     if contact_type == "phone":
@@ -80,6 +86,37 @@ def _mask_contact(contact_type: str, value: str) -> str:
         return f"{value[:3]}****{value[-4:]}"
     local, domain = value.split("@", 1)
     return f"{local[:1]}*****@{domain}"
+
+
+def _hash_verification_code(code: str, salt: str) -> str:
+    return hashlib.sha256(f"{salt}:{code}".encode("utf-8")).hexdigest()
+
+
+def _new_verification_code() -> tuple[str, str, str]:
+    code = f"{secrets.randbelow(1_000_000):06d}"
+    salt = secrets.token_hex(16)
+    return code, salt, _hash_verification_code(code, salt)
+
+
+def _verify_challenge_code(challenge: VerificationChallenge, code: str, now=None) -> tuple[bool, str]:
+    now = now or utcnow()
+    attempts = challenge.attempts or 0
+    max_attempts = challenge.max_attempts or 5
+    if challenge.consumed:
+        return False, "验证码已失效"
+    if now >= challenge.expires_at:
+        challenge.consumed = True
+        return False, "验证码已过期"
+    if attempts >= max_attempts:
+        challenge.consumed = True
+        return False, "验证码尝试次数过多"
+    challenge.attempts = attempts + 1
+    if secrets.compare_digest(challenge.code_hash, _hash_verification_code(code, challenge.code_salt)):
+        challenge.consumed = True
+        return True, "ok"
+    if challenge.attempts >= max_attempts:
+        challenge.consumed = True
+    return False, "验证码错误"
 
 
 def _serialize_contact(contact: UserContact) -> dict:
@@ -186,6 +223,94 @@ async def upsert_contact(
     await db.commit()
     await db.refresh(contact)
     return {"contact": _serialize_contact(contact), "status": "pending_verification" if not contact.verified else "ok"}
+
+
+@router.post("/auth/contacts/{contact_id}/verification-code")
+async def request_contact_verification_code(
+    contact_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(UserContact).where(UserContact.id == contact_id, UserContact.user_id == user.id)
+    )
+    contact = result.scalar_one_or_none()
+    if not contact:
+        raise HTTPException(status_code=404, detail="联系方式不存在")
+    if contact.verified:
+        return {"status": "already_verified", "contact": _serialize_contact(contact)}
+
+    previous = await db.execute(
+        select(VerificationChallenge).where(
+            VerificationChallenge.contact_id == contact.id,
+            VerificationChallenge.user_id == user.id,
+            VerificationChallenge.consumed.is_(False),
+        )
+    )
+    for challenge in previous.scalars().all():
+        challenge.consumed = True
+        challenge.updated_at = utcnow()
+
+    code, salt, digest = _new_verification_code()
+    challenge = VerificationChallenge(
+        user_id=user.id,
+        contact_id=contact.id,
+        code_hash=digest,
+        code_salt=salt,
+        expires_at=utcnow() + timedelta(minutes=10),
+    )
+    db.add(challenge)
+    await db.commit()
+    await db.refresh(challenge)
+    # 实际短信/邮件投递由 provider worker 消费此挑战；不在 API 响应中泄露验证码。
+    return {
+        "status": "queued_for_delivery",
+        "delivery_channel": contact.contact_type,
+        "expires_at": challenge.expires_at.isoformat(),
+        "message": "验证码已进入投递队列，待配置短信/邮件服务后发送",
+    }
+
+
+@router.post("/auth/contacts/{contact_id}/verify")
+async def verify_contact(
+    contact_id: uuid.UUID,
+    payload: VerificationCodeInput,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    contact_result = await db.execute(
+        select(UserContact).where(UserContact.id == contact_id, UserContact.user_id == user.id)
+    )
+    contact = contact_result.scalar_one_or_none()
+    if not contact:
+        raise HTTPException(status_code=404, detail="联系方式不存在")
+    if contact.verified:
+        return {"status": "already_verified", "contact": _serialize_contact(contact)}
+
+    challenge_result = await db.execute(
+        select(VerificationChallenge)
+        .where(
+            VerificationChallenge.contact_id == contact.id,
+            VerificationChallenge.user_id == user.id,
+        )
+        .order_by(VerificationChallenge.created_at.desc())
+        .limit(1)
+    )
+    challenge = challenge_result.scalar_one_or_none()
+    if not challenge:
+        raise HTTPException(status_code=400, detail="请先获取验证码")
+    ok, reason = _verify_challenge_code(challenge, payload.code)
+    if not ok:
+        challenge.updated_at = utcnow()
+        await db.commit()
+        raise HTTPException(status_code=400, detail=reason)
+
+    contact.verified = True
+    contact.updated_at = utcnow()
+    challenge.updated_at = utcnow()
+    await db.commit()
+    await db.refresh(contact)
+    return {"status": "verified", "contact": _serialize_contact(contact)}
 
 
 @router.delete("/auth/contacts/{contact_id}")

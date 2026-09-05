@@ -337,6 +337,24 @@ class UserContact(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
+class VerificationChallenge(Base):
+    """联系方式验证码挑战；只保存摘要，不保存明文验证码。"""
+
+    __tablename__ = "verification_challenges"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    contact_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("user_contacts.id", ondelete="CASCADE"))
+    code_hash: Mapped[str] = mapped_column(String(128))
+    code_salt: Mapped[str] = mapped_column(String(32))
+    expires_at: Mapped[datetime] = mapped_column(DateTime)
+    attempts: Mapped[int] = mapped_column(default=0)
+    max_attempts: Mapped[int] = mapped_column(default=5)
+    consumed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
 class LearningRecord(Base):
     """账号级课程修读记录，用于学习进度汇总。"""
 

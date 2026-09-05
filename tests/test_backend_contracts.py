@@ -6,14 +6,14 @@
 
 import asyncio
 import unittest
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 from fastapi import HTTPException
 from pydantic import ValidationError
 
 from apps.api import config
-from apps.api.models import Feedback, Job, JobApplication, JobFavorite, KnowledgeProgress, LearningActivity, LearningPlan, LearningRecord, Notification, PasswordHistory, ProgramEnrollment, RecommendationReport, SyncRecord, User, UserContact
+from apps.api.models import Feedback, Job, JobApplication, JobFavorite, KnowledgeProgress, LearningActivity, LearningPlan, LearningRecord, Notification, PasswordHistory, ProgramEnrollment, RecommendationReport, SyncRecord, User, UserContact, VerificationChallenge, utcnow
 from apps.api.routes import account
 from apps.api.routes import auth
 from apps.api.routes import knowledge
@@ -354,6 +354,40 @@ class BackendContractTests(unittest.TestCase):
             account.ContactCreate(contact_type="phone", value="12345")
         with self.assertRaises(ValidationError):
             account.ContactCreate(contact_type="email", value="not-an-email")
+
+    def test_verification_challenge_stores_only_digest_and_consumes_once(self):
+        code, salt, digest = account._new_verification_code()
+        challenge = VerificationChallenge(
+            code_hash=digest,
+            code_salt=salt,
+            expires_at=utcnow() + timedelta(minutes=10),
+            max_attempts=2,
+        )
+        self.assertNotEqual(code, challenge.code_hash)
+        self.assertEqual(account._verify_challenge_code(challenge, code), (True, "ok"))
+        self.assertEqual(account._verify_challenge_code(challenge, code), (False, "验证码已失效"))
+
+    def test_verification_challenge_expires_and_limits_attempts(self):
+        code, salt, digest = account._new_verification_code()
+        challenge = VerificationChallenge(
+            code_hash=digest,
+            code_salt=salt,
+            expires_at=utcnow() - timedelta(seconds=1),
+            max_attempts=2,
+        )
+        self.assertEqual(account._verify_challenge_code(challenge, code)[1], "验证码已过期")
+        self.assertTrue(challenge.consumed)
+
+        code, salt, digest = account._new_verification_code()
+        challenge = VerificationChallenge(
+            code_hash=digest,
+            code_salt=salt,
+            expires_at=utcnow() + timedelta(minutes=10),
+            max_attempts=2,
+        )
+        self.assertEqual(account._verify_challenge_code(challenge, "000000")[1], "验证码错误")
+        self.assertEqual(account._verify_challenge_code(challenge, "000000")[1], "验证码错误")
+        self.assertTrue(challenge.consumed)
 
     def test_learning_progress_summary_uses_only_completed_credits(self):
         records = [
