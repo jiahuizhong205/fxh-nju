@@ -891,6 +891,24 @@ class BackendContractTests(unittest.TestCase):
         with self.assertRaises(ValidationError):
             sync.SyncRequest(scopes=["unknown"])
 
+    def test_sync_snapshot_excludes_authentication_secrets(self):
+        user = User(
+            username="snapshot-user",
+            nickname="快照用户",
+            token="secret-token",
+            password_hash="secret-password-hash",
+            salt="secret-salt",
+            preferences={"visibility": {"scope": "仅自己"}},
+        )
+
+        snapshot = sync._serialize_snapshot(user, {"profile": {"major": "新闻学"}})
+
+        self.assertEqual(snapshot["schema_version"], 1)
+        self.assertEqual(snapshot["scopes"]["profile"]["major"], "新闻学")
+        self.assertNotIn("token", snapshot["account"])
+        self.assertNotIn("password_hash", snapshot["account"])
+        self.assertNotIn("secret-token", str(snapshot))
+
     def test_notification_keeps_delivery_and_read_state(self):
         item = Notification(
             user_id="00000000-0000-0000-0000-000000000001",
