@@ -112,6 +112,18 @@ async def init_db():
                 "delivered_at TIMESTAMP NULL"
             ))
             await conn.execute(text(
+                "ALTER TABLE feedback_attachments ADD COLUMN IF NOT EXISTS "
+                "storage_backend VARCHAR(30) NOT NULL DEFAULT 'database'"
+            ))
+            await conn.execute(text(
+                "ALTER TABLE feedback_attachments ADD COLUMN IF NOT EXISTS "
+                "storage_key TEXT NOT NULL DEFAULT ''"
+            ))
+            await conn.execute(text(
+                "ALTER TABLE feedback_attachments ADD COLUMN IF NOT EXISTS "
+                "scan_status VARCHAR(20) NOT NULL DEFAULT 'clean'"
+            ))
+            await conn.execute(text(
                 "ALTER TABLE courses ADD COLUMN IF NOT EXISTS "
                 "capacity INTEGER NOT NULL DEFAULT 0"
             ))

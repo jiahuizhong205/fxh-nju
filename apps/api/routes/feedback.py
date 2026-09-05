@@ -3,6 +3,7 @@
 import hashlib
 from uuid import UUID
 
+import httpx
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel, Field, field_validator
@@ -10,6 +11,7 @@ from typing import Literal
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from apps.api.config import settings
 from apps.api.database import get_db
 from apps.api.models import Feedback, FeedbackAttachment, FeedbackReply, User, utcnow
 from apps.api.routes.auth import get_current_user
@@ -79,6 +81,62 @@ def _validate_attachment(content_type: str | None, content: bytes) -> None:
     signature_check = ATTACHMENT_SIGNATURES[content_type]
     if not signature_check(content):
         raise ValueError("附件内容与声明的文件类型不匹配")
+
+
+async def _scan_feedback_attachment(
+    filename: str,
+    content_type: str | None,
+    content: bytes,
+) -> str:
+    """先做本地签名校验，再按需调用扫描 provider。"""
+    _validate_attachment(content_type, content)
+    scan_url = settings.feedback_scan_url.strip()
+    if not scan_url:
+        return "clean"
+    headers = {}
+    if settings.feedback_scan_api_key:
+        headers["Authorization"] = f"Bearer {settings.feedback_scan_api_key}"
+    try:
+        async with httpx.AsyncClient(timeout=settings.feedback_scan_timeout_seconds) as client:
+            response = await client.post(
+                scan_url,
+                files={"file": (filename, content, content_type)},
+                headers=headers,
+            )
+            response.raise_for_status()
+            result = response.json()
+    except Exception:
+        return "failed"
+    if result.get("clean") is False or result.get("status") in {"infected", "rejected"}:
+        return "rejected"
+    if result.get("clean") is True or result.get("status") == "clean":
+        return "clean"
+    return "failed"
+
+
+async def _store_feedback_attachment(
+    filename: str,
+    content_type: str,
+    content: bytes,
+) -> tuple[str, str]:
+    """将附件交给可选对象存储 gateway；默认回退到数据库。"""
+    storage_url = settings.feedback_storage_url.strip()
+    if not storage_url:
+        return "database", ""
+    headers = {}
+    if settings.feedback_storage_api_key:
+        headers["Authorization"] = f"Bearer {settings.feedback_storage_api_key}"
+    async with httpx.AsyncClient(timeout=settings.feedback_storage_timeout_seconds) as client:
+        response = await client.post(
+            storage_url,
+            files={"file": (filename, content, content_type)},
+            headers=headers,
+        )
+        response.raise_for_status()
+        storage_key = response.json().get("key", "").strip()
+    if not storage_key:
+        raise RuntimeError("对象存储未返回文件 key")
+    return "object_storage", storage_key
 
 
 @router.post("/feedback")
@@ -276,16 +334,31 @@ async def upload_feedback_attachments(
     for file in files:
         content = await file.read()
         try:
-            _validate_attachment(file.content_type, content)
+            scan_status = await _scan_feedback_attachment(
+                (file.filename or "attachment")[:255], file.content_type, content
+            )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+        if scan_status == "rejected":
+            raise HTTPException(status_code=400, detail="附件未通过安全扫描")
+        if scan_status == "failed":
+            raise HTTPException(status_code=503, detail="附件安全扫描服务暂不可用")
+        try:
+            storage_backend, storage_key = await _store_feedback_attachment(
+                (file.filename or "attachment")[:255], file.content_type, content
+            )
+        except Exception as exc:
+            raise HTTPException(status_code=503, detail="附件存储服务暂不可用") from exc
         attachment = FeedbackAttachment(
             feedback_id=feedback.id,
             filename=(file.filename or "attachment")[:255],
             content_type=file.content_type,
-            data=content,
+            data=content if storage_backend == "database" else b"",
             size_bytes=len(content),
             sha256=hashlib.sha256(content).hexdigest(),
+            storage_backend=storage_backend,
+            storage_key=storage_key,
+            scan_status=scan_status,
         )
         db.add(attachment)
         saved.append(attachment)
@@ -302,6 +375,8 @@ async def upload_feedback_attachments(
             "content_type": item.content_type,
             "size_bytes": item.size_bytes,
             "sha256": item.sha256,
+            "storage_backend": item.storage_backend,
+            "scan_status": item.scan_status,
         } for item in saved]
     }
 
@@ -322,8 +397,26 @@ async def download_feedback_attachment(
     attachment = await db.get(FeedbackAttachment, attachment_id)
     if not attachment or attachment.feedback_id != feedback_id:
         raise HTTPException(status_code=404, detail="附件不存在")
+    content = attachment.data
+    if attachment.storage_backend == "object_storage":
+        storage_url = settings.feedback_storage_url.strip()
+        if not storage_url or not attachment.storage_key:
+            raise HTTPException(status_code=503, detail="附件存储配置不可用")
+        headers = {}
+        if settings.feedback_storage_api_key:
+            headers["Authorization"] = f"Bearer {settings.feedback_storage_api_key}"
+        try:
+            async with httpx.AsyncClient(timeout=settings.feedback_storage_timeout_seconds) as client:
+                stored = await client.get(
+                    f"{storage_url.rstrip('/')}/{attachment.storage_key}",
+                    headers=headers,
+                )
+                stored.raise_for_status()
+                content = stored.content
+        except Exception as exc:
+            raise HTTPException(status_code=503, detail="附件存储服务暂不可用") from exc
     return Response(
-        content=attachment.data,
+        content=content,
         media_type=attachment.content_type,
         headers={"Content-Disposition": f'attachment; filename="{attachment.filename}"'},
     )

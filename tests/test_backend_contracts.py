@@ -514,6 +514,66 @@ class BackendContractTests(unittest.TestCase):
         with self.assertRaises(ValidationError):
             feedback.FeedbackAdminReply(content=" ")
 
+    def test_feedback_attachment_scan_without_provider_is_clean_after_signature_check(self):
+        previous_url = feedback.settings.feedback_scan_url
+        feedback.settings.feedback_scan_url = ""
+        try:
+            result = asyncio.run(
+                feedback._scan_feedback_attachment(
+                    "screen.png", "image/png", b"\x89PNG\r\n\x1a\nvalid"
+                )
+            )
+        finally:
+            feedback.settings.feedback_scan_url = previous_url
+        self.assertEqual(result, "clean")
+
+    def test_feedback_attachment_scan_provider_can_reject_content(self):
+        previous_url = feedback.settings.feedback_scan_url
+        feedback.settings.feedback_scan_url = "https://scan.example.test/check"
+
+        class FakeResponse:
+            def raise_for_status(self):
+                return None
+
+            def json(self):
+                return {"clean": False, "reason": "test signature"}
+
+        class FakeClient:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *_args):
+                return None
+
+            async def post(self, *_args, **_kwargs):
+                return FakeResponse()
+
+        previous_client = feedback.httpx.AsyncClient
+        feedback.httpx.AsyncClient = lambda **_kwargs: FakeClient()
+        try:
+            result = asyncio.run(
+                feedback._scan_feedback_attachment(
+                    "screen.png", "image/png", b"\x89PNG\r\n\x1a\nvalid"
+                )
+            )
+        finally:
+            feedback.httpx.AsyncClient = previous_client
+            feedback.settings.feedback_scan_url = previous_url
+        self.assertEqual(result, "rejected")
+
+    def test_feedback_attachment_tracks_storage_backend_and_scan_status(self):
+        attachment = FeedbackAttachment(
+            filename="screen.png",
+            content_type="image/png",
+            data=b"\x89PNG\r\n\x1a\nvalid",
+            size_bytes=13,
+            sha256="a" * 64,
+            storage_backend="database",
+            scan_status="clean",
+        )
+        self.assertEqual(attachment.storage_backend, "database")
+        self.assertEqual(attachment.scan_status, "clean")
+
     def test_unverified_contact_cannot_become_primary(self):
         contact = UserContact(contact_type="phone", value="13800138000", verified=False, is_primary=False)
         self.assertFalse(contact.is_primary)

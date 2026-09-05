@@ -29,6 +29,13 @@ class Settings(BaseSettings):
     notification_provider_api_key: str = ""
     notification_provider_timeout_seconds: float = 5.0
     notification_worker_interval_seconds: int = 60
+    # 反馈附件的安全扫描与对象存储均可选；留空时使用本地签名校验和数据库存储。
+    feedback_scan_url: str = ""
+    feedback_scan_api_key: str = ""
+    feedback_scan_timeout_seconds: float = 10.0
+    feedback_storage_url: str = ""
+    feedback_storage_api_key: str = ""
+    feedback_storage_timeout_seconds: float = 10.0
 
 
 settings = Settings()

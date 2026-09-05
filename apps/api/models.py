@@ -184,6 +184,9 @@ class FeedbackAttachment(Base):
     data: Mapped[bytes] = mapped_column(LargeBinary)
     size_bytes: Mapped[int] = mapped_column()
     sha256: Mapped[str] = mapped_column(String(64))
+    storage_backend: Mapped[str] = mapped_column(String(30), default="database")
+    storage_key: Mapped[str] = mapped_column(Text, default="")
+    scan_status: Mapped[str] = mapped_column(String(20), default="clean")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
