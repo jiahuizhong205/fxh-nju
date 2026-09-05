@@ -23,6 +23,7 @@ from apps.api.routes import profile
 from apps.api.routes import sync
 from packages.contracts.schemas import ChatRequest
 from services.planning.recommendation_engine import hard_filter
+from services.planning.schedule_conflicts import detect_schedule_conflicts
 
 
 class _CommitOnlyDb:
@@ -103,6 +104,7 @@ class BackendContractTests(unittest.TestCase):
         content = database.read_text(encoding="utf-8")
         self.assertIn("ALTER TABLE recommendation_reports ADD COLUMN IF NOT EXISTS", content)
         self.assertIn("is_stale BOOLEAN NOT NULL DEFAULT FALSE", content)
+        self.assertIn("ALTER TABLE courses ADD COLUMN IF NOT EXISTS schedule", content)
 
     def test_password_policy_accepts_eight_to_twenty_alphanumeric_password(self):
         for password in ("Abcdef12", "NJU2026ok", "A1" + "x" * 18):
@@ -547,6 +549,28 @@ class BackendContractTests(unittest.TestCase):
         )
         self.assertEqual(request.knowledge_node_id, "k003")
         self.assertEqual(request.knowledge_node_name, "消息与通讯写作")
+
+    def test_schedule_conflict_detector_finds_overlapping_classes(self):
+        result = detect_schedule_conflicts(
+            [
+                {"id": "a", "name": "课程 A", "campus": "仙林校区", "schedule": [{"day": 2, "start": 5, "end": 7}]},
+                {"id": "b", "name": "课程 B", "campus": "鼓楼校区", "schedule": [{"day": 2, "start": 7, "end": 8}]},
+                {"id": "c", "name": "课程 C", "campus": "鼓楼校区", "schedule": [{"day": 3, "start": 5, "end": 7}]},
+            ],
+            user_campus="仙林校区",
+            campus_flexibility=False,
+        )
+        self.assertEqual(len(result["conflicts"]), 0)
+        self.assertTrue(result["warnings"])
+
+        overlap = detect_schedule_conflicts(
+            [
+                {"id": "a", "name": "课程 A", "campus": "仙林校区", "schedule": [{"day": 2, "start": 5, "end": 7}]},
+                {"id": "b", "name": "课程 B", "campus": "仙林校区", "schedule": [{"day": 2, "start": 6, "end": 8}]},
+            ]
+        )
+        self.assertEqual(len(overlap["conflicts"]), 1)
+        self.assertFalse(overlap["feasible"])
 
 
 if __name__ == "__main__":

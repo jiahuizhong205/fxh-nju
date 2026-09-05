@@ -239,6 +239,7 @@ class Course(Base):
     department: Mapped[str] = mapped_column(String(200), default="")
     teaching_place: Mapped[str] = mapped_column(Text, default="")
     school_term: Mapped[str] = mapped_column(String(20), default="")
+    schedule: Mapped[list] = mapped_column(JSON, default=list)
     source: Mapped[str] = mapped_column(String(100), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 

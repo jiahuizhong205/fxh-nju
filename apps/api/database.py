@@ -72,3 +72,6 @@ async def init_db():
             await conn.execute(text(
                 "ALTER TABLE feedback ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP"
             ))
+            await conn.execute(text(
+                "ALTER TABLE courses ADD COLUMN IF NOT EXISTS schedule JSONB NOT NULL DEFAULT '[]'::jsonb"
+            ))

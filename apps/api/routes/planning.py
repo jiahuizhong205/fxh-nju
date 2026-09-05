@@ -54,6 +54,10 @@ class JobApplicationUpdate(BaseModel):
     applied_at: datetime | None = None
 
 
+class ConflictCheckRequest(BaseModel):
+    teaching_class_ids: list[str] = Field(min_length=1, max_length=100)
+
+
 async def _latest_profile(db: AsyncSession, user_id) -> dict | None:
     result = await db.execute(
         select(StudentProfile)
@@ -512,6 +516,7 @@ def _course_dict(c) -> dict:
         "department": c.department,
         "teaching_place": c.teaching_place,
         "school_term": c.school_term,
+        "schedule": c.schedule or [],
     }
 
 
@@ -528,6 +533,43 @@ async def program_courses(name: str, db: AsyncSession = Depends(get_db)):
         "program": name,
         "department": prog.department,
         "courses": [_course_dict(c) for c in result.scalars().all()],
+    }
+
+
+@router.post("/courses/conflicts")
+async def course_conflicts(
+    payload: ConflictCheckRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    from services.planning.schedule_conflicts import detect_schedule_conflicts
+
+    result = await db.execute(
+        select(Course).where(Course.teaching_class_id.in_(payload.teaching_class_ids))
+    )
+    courses = result.scalars().all()
+    found = {course.teaching_class_id for course in courses}
+    profile = await _latest_profile(db, user.id) or {}
+    preferences = profile.get("schedule_preferences", {})
+    normalized = [
+        {
+            "id": course.teaching_class_id,
+            "name": course.course_name,
+            "campus": course.campus,
+            "schedule": course.schedule or [],
+        }
+        for course in courses
+    ]
+    analysis = detect_schedule_conflicts(
+        normalized,
+        user_campus=profile.get("campus", ""),
+        campus_flexibility=profile.get("campus_flexibility", False)
+        or "跨校区通勤" in preferences.get("conflict_strategies", []),
+    )
+    return {
+        **analysis,
+        "teaching_class_ids": payload.teaching_class_ids,
+        "missing_teaching_class_ids": [item for item in payload.teaching_class_ids if item not in found],
     }
 
 
