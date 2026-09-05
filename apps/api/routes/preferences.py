@@ -58,6 +58,28 @@ class PreferencesUpdate(BaseModel):
     preferences: PreferencesData = Field(default_factory=PreferencesData)
 
 
+_SECTION_MODELS = {
+    "learning_reminder": LearningReminderPreferences,
+    "job_push": JobPushPreferences,
+    "visibility": VisibilityPreferences,
+}
+
+
+def _merge_preference_section(existing: dict, section: str, value: dict) -> dict:
+    model = _SECTION_MODELS[section].model_validate(value)
+    data = PreferencesData.model_validate(existing or {})
+    setattr(data, section, model)
+    return data.model_dump(exclude_none=True)
+
+
+async def _save_preference_section(section: str, value: BaseModel, user: User, db: AsyncSession) -> dict:
+    user.preferences = _merge_preference_section(
+        user.preferences or {}, section, value.model_dump()
+    )
+    await db.commit()
+    return getattr(value, "model_dump")()
+
+
 @router.get("/preferences")
 async def get_preferences(user: User = Depends(get_current_user)):
     return {"preferences": PreferencesData.model_validate(user.preferences or {}).model_dump(exclude_none=True)}
@@ -72,3 +94,48 @@ async def update_preferences(
     user.preferences = payload.preferences.model_dump(exclude_none=True)
     await db.commit()
     return {"preferences": user.preferences}
+
+
+@router.get("/preferences/learning-reminder")
+async def get_learning_reminder_preferences(user: User = Depends(get_current_user)):
+    data = PreferencesData.model_validate(user.preferences or {})
+    return {"preferences": data.learning_reminder.model_dump()}
+
+
+@router.put("/preferences/learning-reminder")
+async def save_learning_reminder_preferences(
+    payload: LearningReminderPreferences,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return {"preferences": await _save_preference_section("learning_reminder", payload, user, db)}
+
+
+@router.get("/preferences/job-push")
+async def get_job_push_preferences(user: User = Depends(get_current_user)):
+    data = PreferencesData.model_validate(user.preferences or {})
+    return {"preferences": data.job_push.model_dump()}
+
+
+@router.put("/preferences/job-push")
+async def save_job_push_preferences(
+    payload: JobPushPreferences,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return {"preferences": await _save_preference_section("job_push", payload, user, db)}
+
+
+@router.get("/preferences/visibility")
+async def get_visibility_preferences(user: User = Depends(get_current_user)):
+    data = PreferencesData.model_validate(user.preferences or {})
+    return {"preferences": data.visibility.model_dump()}
+
+
+@router.put("/preferences/visibility")
+async def save_visibility_preferences(
+    payload: VisibilityPreferences,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return {"preferences": await _save_preference_section("visibility", payload, user, db)}

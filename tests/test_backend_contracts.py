@@ -248,6 +248,15 @@ class BackendContractTests(unittest.TestCase):
                 job_push={"locations": ["南京"], "job_types": ["实习", 3]}
             )
 
+    def test_preference_section_merge_does_not_drop_other_settings(self):
+        merged = preferences._merge_preference_section(
+            {"version": 1, "notifications": {"学习浇水提醒": True}},
+            "job_push",
+            {"enabled": False, "locations": ["南京"]},
+        )
+        self.assertFalse(merged["job_push"]["enabled"])
+        self.assertEqual(merged["notifications"]["学习浇水提醒"], True)
+
     def test_onboarding_status_is_persisted_on_account(self):
         user = User(
             username="onboarding-user",
