@@ -4,8 +4,8 @@ import uuid
 from datetime import datetime
 from typing import Literal
 
-from fastapi import APIRouter, Depends, Query
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field, StrictBool
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,6 +14,7 @@ from apps.api.models import (
     JobFavorite,
     LearningPlan,
     LearningRecord,
+    Job,
     RecommendationReport,
     StudentProfile,
     SyncRecord,
@@ -21,6 +22,7 @@ from apps.api.models import (
     utcnow,
 )
 from apps.api.routes.auth import get_current_user
+from apps.api.routes.profile import ProfileUpdate
 
 router = APIRouter()
 
@@ -182,6 +184,254 @@ async def export_sync_snapshot(
         } for item in result.scalars().all()]
 
     return _serialize_snapshot(user, data)
+
+
+class SyncImportRequest(BaseModel):
+    snapshot: dict = Field(min_length=1)
+    scopes: list[SyncScope] = Field(default_factory=list, max_length=len(ALL_SCOPES))
+    request_id: uuid.UUID = Field(default_factory=uuid.uuid4)
+    confirm: StrictBool = False
+
+
+def _validate_snapshot(snapshot: dict) -> tuple[bool, str]:
+    if snapshot.get("schema_version") != 1:
+        return False, "不支持的同步快照版本"
+    scopes = snapshot.get("scopes")
+    if not isinstance(scopes, dict):
+        return False, "同步快照缺少 scopes"
+    if set(scopes) - set(ALL_SCOPES):
+        return False, "同步快照包含未知范围"
+    if not isinstance(snapshot.get("account", {}), dict):
+        return False, "同步快照 account 格式不正确"
+    return True, "ok"
+
+
+def _profile_import_values(raw: dict, existing: StudentProfile | None = None) -> dict | None:
+    """把导入画像交给统一 schema 校验，并排除版本/时间等服务端字段。"""
+    if not isinstance(raw, dict):
+        return None
+    allowed = {
+        "major", "grade", "campus", "interests", "strengths", "career_goals",
+        "math_willingness", "campus_flexibility", "credit_budget", "certificate_goal",
+        "schedule_preferences",
+    }
+    values = {
+        "major": existing.major if existing else "",
+        "grade": existing.grade if existing else "",
+        "campus": existing.campus if existing else "",
+        "interests": existing.interests if existing else [],
+        "strengths": existing.strengths if existing else [],
+        "career_goals": existing.career_goals if existing else "",
+        "math_willingness": existing.math_willingness if existing else False,
+        "campus_flexibility": existing.campus_flexibility if existing else False,
+        "credit_budget": existing.credit_budget if existing else 0,
+        "certificate_goal": existing.certificate_goal if existing else "",
+        "schedule_preferences": existing.schedule_preferences if existing else {},
+    }
+    values.update({key: raw[key] for key in allowed if key in raw})
+    if not all(isinstance(values.get(key), str) and values[key].strip() for key in ("major", "grade")):
+        return None
+    try:
+        return ProfileUpdate.model_validate(values).model_dump()
+    except Exception:
+        return None
+
+
+@router.post("/sync/import/preview")
+async def preview_sync_import(payload: SyncImportRequest):
+    """只校验快照结构并返回待导入范围，不修改数据库。"""
+    valid, reason = _validate_snapshot(payload.snapshot)
+    if not valid:
+        return {"valid": False, "reason": reason, "scopes": []}
+    requested = payload.scopes or list(ALL_SCOPES)
+    available = [scope for scope in requested if scope in payload.snapshot.get("scopes", {})]
+    return {
+        "valid": True,
+        "schema_version": payload.snapshot["schema_version"],
+        "request_id": str(payload.request_id),
+        "scopes": available,
+        "requires_confirmation": True,
+    }
+
+
+@router.post("/sync/import")
+async def import_sync_snapshot(
+    payload: SyncImportRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """确认后合并脱敏快照；重复请求不会重复导入。"""
+    if not payload.confirm:
+        raise HTTPException(status_code=400, detail="请先预览并确认同步快照")
+    valid, reason = _validate_snapshot(payload.snapshot)
+    if not valid:
+        raise HTTPException(status_code=400, detail=reason)
+
+    requested = payload.scopes or list(ALL_SCOPES)
+    snapshot_scopes = payload.snapshot.get("scopes", {})
+    records = await _load_records(db, user.id)
+    now = utcnow()
+    counts = {scope: {"added": 0, "updated": 0, "skipped": 0} for scope in requested}
+    updated_records: list[SyncRecord] = []
+
+    for scope in requested:
+        record = records.get(scope)
+        if record and _is_duplicate_request(record, payload.request_id):
+            counts[scope]["skipped"] = 1
+            continue
+        raw_scope = snapshot_scopes.get(scope)
+
+        if scope == "profile" and isinstance(raw_scope, dict):
+            result = await db.execute(
+                select(StudentProfile)
+                .where(StudentProfile.user_id == user.id)
+                .order_by(StudentProfile.updated_at.desc())
+                .limit(1)
+            )
+            profile = result.scalar_one_or_none()
+            values = _profile_import_values(raw_scope, profile)
+            if values is None:
+                counts[scope]["skipped"] = 1
+            elif profile:
+                for key, value in values.items():
+                    setattr(profile, key, value)
+                profile.version += 1
+                profile.updated_at = now
+                counts[scope]["updated"] = 1
+            else:
+                db.add(StudentProfile(user_id=user.id, **values))
+                counts[scope]["added"] = 1
+
+        elif scope == "job_favorites" and isinstance(raw_scope, list):
+            existing_result = await db.execute(
+                select(JobFavorite.job_id).where(JobFavorite.user_id == user.id)
+            )
+            existing_ids = set(existing_result.scalars().all())
+            for item in raw_scope[:100]:
+                job_id = item.get("job_id") if isinstance(item, dict) else item
+                if not isinstance(job_id, str) or job_id in existing_ids or not await db.get(Job, job_id):
+                    counts[scope]["skipped"] += 1
+                    continue
+                db.add(JobFavorite(user_id=user.id, job_id=job_id))
+                existing_ids.add(job_id)
+                counts[scope]["added"] += 1
+
+        elif scope == "learning_records" and isinstance(raw_scope, list):
+            result = await db.execute(
+                select(LearningRecord).where(LearningRecord.user_id == user.id)
+            )
+            existing = {
+                (item.course_name, item.term): item
+                for item in result.scalars().all()
+            }
+            for item in raw_scope[:100]:
+                if not isinstance(item, dict):
+                    counts[scope]["skipped"] += 1
+                    continue
+                key = (item.get("course_name"), item.get("term"))
+                try:
+                    credits = float(item.get("credits"))
+                except (TypeError, ValueError):
+                    credits = 0
+                if not isinstance(key[0], str) or not isinstance(key[1], str) or credits <= 0:
+                    counts[scope]["skipped"] += 1
+                    continue
+                values = {
+                    "course_code": str(item.get("course_code", ""))[:50],
+                    "credits": credits,
+                    "status": item.get("status", "completed"),
+                    "grade": item.get("grade"),
+                    "source": "sync_import",
+                }
+                if values["status"] not in {"completed", "in_progress", "planned"}:
+                    counts[scope]["skipped"] += 1
+                    continue
+                current = existing.get(key)
+                if current:
+                    for field, value in values.items():
+                        setattr(current, field, value)
+                    current.updated_at = now
+                    counts[scope]["updated"] += 1
+                else:
+                    db.add(LearningRecord(
+                        user_id=user.id,
+                        course_name=key[0][:200],
+                        term=key[1][:30],
+                        **values,
+                    ))
+                    counts[scope]["added"] += 1
+
+        elif scope == "learning_plans" and isinstance(raw_scope, list):
+            for item in raw_scope[:20]:
+                if not isinstance(item, dict) or not isinstance(item.get("program"), str):
+                    counts[scope]["skipped"] += 1
+                    continue
+                db.add(LearningPlan(
+                    user_id=user.id,
+                    program_name=item["program"][:200],
+                    profile_version=int(item.get("profile_version", 0) or 0),
+                    status="draft",
+                    items=item.get("items", []) if isinstance(item.get("items", []), list) else [],
+                    alternatives=item.get("alternatives", []) if isinstance(item.get("alternatives", []), list) else [],
+                    warnings=item.get("warnings", []) if isinstance(item.get("warnings", []), list) else [],
+                    infeasible=bool(item.get("infeasible", False)),
+                    schedule_analysis=item.get("schedule_analysis", {}) if isinstance(item.get("schedule_analysis", {}), dict) else {},
+                ))
+                counts[scope]["added"] += 1
+
+        elif scope == "recommendation_reports" and isinstance(raw_scope, list):
+            for item in raw_scope[:20]:
+                if not isinstance(item, dict):
+                    counts[scope]["skipped"] += 1
+                    continue
+                db.add(RecommendationReport(
+                    user_id=user.id,
+                    profile_version=int(item.get("profile_version", 0) or 0),
+                    profile_snapshot=item.get("profile_snapshot", {}) if isinstance(item.get("profile_snapshot", {}), dict) else {},
+                    recommendations=item.get("recommendations", []) if isinstance(item.get("recommendations", []), list) else [],
+                    is_stale=True,
+                ))
+                counts[scope]["added"] += 1
+
+        if record:
+            record.version += 1
+            record.status = "synced"
+            record.error = ""
+            record.started_at = now
+            record.completed_at = now
+            record.last_request_id = str(payload.request_id)
+            record.retry_count = (record.retry_count or 0) + 1
+            record.updated_at = now
+        else:
+            record = SyncRecord(
+                user_id=user.id,
+                scope=scope,
+                version=1,
+                status="synced",
+                last_request_id=str(payload.request_id),
+                retry_count=1,
+                started_at=now,
+                completed_at=now,
+                updated_at=now,
+            )
+            db.add(record)
+        updated_records.append(record)
+
+    account = payload.snapshot.get("account", {})
+    if isinstance(account, dict) and isinstance(account.get("preferences"), dict):
+        user.preferences = account["preferences"]
+        if isinstance(account.get("onboarding_completed"), bool):
+            user.onboarding_completed = account["onboarding_completed"]
+
+    await db.commit()
+    for record in updated_records:
+        await db.refresh(record)
+    return {
+        "status": "synced",
+        "request_id": str(payload.request_id),
+        "counts": counts,
+        "records": [_serialize(record) for record in updated_records],
+    }
 
 
 @router.get("/sync/status")

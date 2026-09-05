@@ -909,6 +909,27 @@ class BackendContractTests(unittest.TestCase):
         self.assertNotIn("password_hash", snapshot["account"])
         self.assertNotIn("secret-token", str(snapshot))
 
+    def test_sync_import_requires_supported_snapshot_and_explicit_confirmation(self):
+        valid = {
+            "schema_version": 1,
+            "account": {},
+            "scopes": {"job_favorites": [{"job_id": "job-1"}]},
+        }
+        self.assertEqual(sync._validate_snapshot(valid), (True, "ok"))
+        self.assertEqual(sync._validate_snapshot({"schema_version": 2, "scopes": {}})[0], False)
+        self.assertEqual(
+            sync._validate_snapshot({"schema_version": 1, "account": {}, "scopes": {"unknown": []}})[0],
+            False,
+        )
+        self.assertFalse(sync.SyncImportRequest(snapshot=valid).confirm)
+        self.assertTrue(sync.SyncImportRequest(snapshot=valid, confirm=True).confirm)
+
+    def test_sync_import_reuses_profile_schema_validation(self):
+        self.assertIsNone(sync._profile_import_values({"major": "新闻学"}))
+        values = sync._profile_import_values({"major": "新闻学", "grade": "大二", "interests": ["写作创作"]})
+        self.assertEqual(values["major"], "新闻学")
+        self.assertEqual(values["interests"], ["写作创作"])
+
     def test_notification_keeps_delivery_and_read_state(self):
         item = Notification(
             user_id="00000000-0000-0000-0000-000000000001",
