@@ -390,6 +390,13 @@ class BackendContractTests(unittest.TestCase):
         self.assertEqual(account._verify_challenge_code(challenge, "000000")[1], "验证码错误")
         self.assertTrue(challenge.consumed)
 
+    def test_visibility_policy_is_conservative_for_friend_scope(self):
+        self.assertTrue(profile._can_view_profile("仅自己", is_self=True, same_major=False))
+        self.assertTrue(profile._can_view_profile("全校公开", is_self=False, same_major=False))
+        self.assertTrue(profile._can_view_profile("同专业同学", is_self=False, same_major=True))
+        self.assertFalse(profile._can_view_profile("同专业同学", is_self=False, same_major=False))
+        self.assertFalse(profile._can_view_profile("仅好友", is_self=False, same_major=True))
+
     def test_learning_progress_summary_uses_only_completed_credits(self):
         records = [
             LearningRecord(course_name="新闻采访", term="2026春", credits=3, status="completed"),

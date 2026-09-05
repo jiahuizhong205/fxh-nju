@@ -1,5 +1,6 @@
 """学生画像 API——CRUD 用户画像。"""
 
+import uuid
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -8,8 +9,9 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.api.database import get_db
-from apps.api.models import RecommendationReport, StudentProfile, User, utcnow
+from apps.api.models import LearningRecord, RecommendationReport, StudentProfile, User, utcnow
 from apps.api.routes.auth import get_current_user
+from apps.api.routes.preferences import VisibilityPreferences
 
 router = APIRouter()
 
@@ -169,3 +171,73 @@ def _serialize(p: StudentProfile) -> dict:
         "version": p.version,
         "updated_at": p.updated_at.isoformat() if p.updated_at else None,
     }
+
+
+def _can_view_profile(scope: str, *, is_self: bool, same_major: bool) -> bool:
+    """统一执行可见范围；好友关系尚未建立时不把普通用户误判为好友。"""
+    if is_self:
+        return True
+    return {
+        "全校公开": True,
+        "同专业同学": same_major,
+        "仅好友": False,
+        "仅自己": False,
+    }.get(scope, False)
+
+
+def _public_profile_summary(
+    user: User,
+    profile: StudentProfile,
+    visibility: VisibilityPreferences,
+    records: list[LearningRecord],
+) -> dict:
+    summary = {"user_id": str(user.id), "nickname": user.nickname}
+    if visibility.show_grade:
+        summary["grade"] = profile.grade
+    if visibility.show_course:
+        completed = [record for record in records if record.status == "completed"]
+        summary["completed_course_count"] = len(completed)
+        summary["completed_credits"] = sum(record.credits for record in completed)
+    if visibility.show_timetable:
+        summary["timetable_preferences"] = profile.schedule_preferences or {}
+    return summary
+
+
+@router.get("/profiles/{user_id}/public-summary")
+async def public_profile_summary(
+    user_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    target_user = await db.get(User, user_id)
+    if not target_user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    target_result = await db.execute(
+        select(StudentProfile)
+        .where(StudentProfile.user_id == user_id)
+        .order_by(StudentProfile.updated_at.desc())
+        .limit(1)
+    )
+    target_profile = target_result.scalar_one_or_none()
+    if not target_profile:
+        raise HTTPException(status_code=404, detail="该用户尚未建立画像")
+
+    viewer_result = await db.execute(
+        select(StudentProfile)
+        .where(StudentProfile.user_id == user.id)
+        .order_by(StudentProfile.updated_at.desc())
+        .limit(1)
+    )
+    viewer_profile = viewer_result.scalar_one_or_none()
+    visibility = VisibilityPreferences.model_validate((target_user.preferences or {}).get("visibility", {}))
+    if not _can_view_profile(
+        visibility.scope,
+        is_self=user.id == user_id,
+        same_major=bool(viewer_profile and viewer_profile.major == target_profile.major),
+    ):
+        raise HTTPException(status_code=403, detail="该用户未向你开放此画像范围")
+
+    records_result = await db.execute(
+        select(LearningRecord).where(LearningRecord.user_id == user_id)
+    )
+    return {"profile": _public_profile_summary(target_user, target_profile, visibility, records_result.scalars().all())}
