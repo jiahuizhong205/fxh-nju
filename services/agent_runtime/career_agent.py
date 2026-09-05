@@ -1,10 +1,10 @@
 """职业探索子图——画像→匹配→报告。"""
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 
 from langgraph.graph import StateGraph, START, END
-from langchain_openai import ChatOpenAI
-from langchain_core.messages import HumanMessage, SystemMessage
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -30,7 +30,9 @@ class CareerAgent:
     llm: ChatOpenAI | None = None
 
     def __post_init__(self):
-        if self.llm is None:
+        if self.llm is None and not settings.mock_llm:
+            from langchain_openai import ChatOpenAI
+
             self.llm = ChatOpenAI(
                 base_url=settings.llm_base_url,
                 api_key=settings.llm_api_key,
@@ -88,6 +90,8 @@ class CareerAgent:
             f"  匹配原因: {'; '.join(m['match_reasons']) if m['match_reasons'] else '基础匹配'}"
             for i, m in enumerate(matches[:3])
         )
+
+        from langchain_core.messages import HumanMessage, SystemMessage
 
         response = await self.llm.ainvoke([
             SystemMessage(content=CAREER_SYSTEM),

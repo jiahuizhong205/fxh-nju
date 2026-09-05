@@ -7,15 +7,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update
-from langchain_core.messages import HumanMessage
 
 from apps.api.database import get_db
 from apps.api.config import settings
 from apps.api.models import Conversation, Message, User, utcnow
 from apps.api.routes.auth import get_current_user
 from packages.contracts.schemas import ChatRequest, AssistantAnswer
-from services.agent_runtime.state import AssistantState
-from services.agent_runtime.graph import RootGraph
 from services.security.input_guard import detect_injection
 
 router = APIRouter()
@@ -46,14 +43,6 @@ async def _stream_answer(
     intent: str = "policy",
     knowledge_context: dict | None = None,
 ):
-    graph = RootGraph(db).compiled
-
-    state: AssistantState = {
-        "messages": [HumanMessage(content=query)],
-        "intent": intent,
-        "knowledge_context": knowledge_context or {},
-    }
-
     config = {"configurable": {"thread_id": str(thread_id)}}
 
     # node_update: 开始检索
@@ -69,6 +58,17 @@ async def _stream_answer(
         elif settings.mock_llm:
             result = _mock_result(query, intent, knowledge_context)
         else:
+            from langchain_core.messages import HumanMessage
+
+            from services.agent_runtime.graph import RootGraph
+            from services.agent_runtime.state import AssistantState
+
+            graph = RootGraph(db).compiled
+            state: AssistantState = {
+                "messages": [HumanMessage(content=query)],
+                "intent": intent,
+                "knowledge_context": knowledge_context or {},
+            }
             result = await graph.ainvoke(state, config)
     except Exception as e:
         yield f"event: error\ndata: {json.dumps({'message': str(e)}, ensure_ascii=False)}\n\n"

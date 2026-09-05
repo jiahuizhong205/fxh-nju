@@ -1,10 +1,10 @@
 """课程规划子图——加载画像 → 生成规划 → 验证方案。"""
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 
 from langgraph.graph import StateGraph, START, END
-from langchain_openai import ChatOpenAI
-from langchain_core.messages import HumanMessage, SystemMessage
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,7 +20,9 @@ class PlanAgent:
     llm: ChatOpenAI | None = None
 
     def __post_init__(self):
-        if self.llm is None:
+        if self.llm is None and not settings.mock_llm:
+            from langchain_openai import ChatOpenAI
+
             self.llm = ChatOpenAI(
                 base_url=settings.llm_base_url,
                 api_key=settings.llm_api_key,
@@ -108,6 +110,8 @@ class PlanAgent:
 
         plan_text = "\n".join(lines)
         warn_text = "\n".join(f"- {w}" for w in warnings) if warnings else "无冲突"
+
+        from langchain_core.messages import HumanMessage, SystemMessage
 
         response = await self.llm.ainvoke([
             SystemMessage(content="你是课程规划助手。用简洁清晰的方式呈现辅修课程时间轴，标注校区和风险。"),

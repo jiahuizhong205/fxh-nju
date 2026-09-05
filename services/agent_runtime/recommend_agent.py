@@ -1,10 +1,10 @@
 """辅修推荐子图——画像补全 → 硬过滤 → 评分 → 报告。"""
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 
 from langgraph.graph import StateGraph, START, END
-from langchain_openai import ChatOpenAI
-from langchain_core.messages import HumanMessage, SystemMessage
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.api.config import settings
@@ -32,7 +32,9 @@ class RecommendAgent:
     llm: ChatOpenAI | None = None
 
     def __post_init__(self):
-        if self.llm is None:
+        if self.llm is None and not settings.mock_llm:
+            from langchain_openai import ChatOpenAI
+
             self.llm = ChatOpenAI(
                 base_url=settings.llm_base_url,
                 api_key=settings.llm_api_key,
@@ -127,6 +129,8 @@ class RecommendAgent:
 2. 每个推荐专业的核心优势
 3. 需要注意的风险和前置条件
 4. 若画像信息不足，提出追问建议"""
+        from langchain_core.messages import HumanMessage, SystemMessage
+
         response = await self.llm.ainvoke([
             SystemMessage(content=SYSTEM_PROMPT),
             HumanMessage(content=prompt),

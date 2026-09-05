@@ -1,10 +1,10 @@
 """伴学子图——知识树生成 → 讲解 → 测验 → 进度。"""
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 
 from langgraph.graph import StateGraph, START, END
-from langchain_openai import ChatOpenAI
-from langchain_core.messages import HumanMessage, SystemMessage
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -30,7 +30,9 @@ class TutorAgent:
     llm: ChatOpenAI | None = None
 
     def __post_init__(self):
-        if self.llm is None:
+        if self.llm is None and not settings.mock_llm:
+            from langchain_openai import ChatOpenAI
+
             self.llm = ChatOpenAI(
                 base_url=settings.llm_base_url,
                 api_key=settings.llm_api_key,
@@ -131,6 +133,8 @@ class TutorAgent:
 2. 按先修顺序推荐学习路径
 3. 对每个阶段提出一个可操作的学习任务
 4. 语气鼓励、像学长学姐一样"""
+
+        from langchain_core.messages import HumanMessage, SystemMessage
 
         response = await self.llm.ainvoke([
             SystemMessage(content=TUTOR_SYSTEM),
