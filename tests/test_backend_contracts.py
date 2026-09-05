@@ -20,6 +20,7 @@ from apps.api.routes import knowledge
 from apps.api.routes import planning
 from apps.api.routes import preferences
 from apps.api.routes import profile
+from packages.contracts.schemas import ChatRequest
 from services.planning.recommendation_engine import hard_filter
 
 
@@ -506,6 +507,16 @@ class BackendContractTests(unittest.TestCase):
         ]
         summary = account._summarize_learning_activities(activities, today=date(2026, 9, 5))
         self.assertEqual(summary, {"learning_days": 3, "streak_days": 2})
+
+    def test_chat_request_keeps_knowledge_point_context(self):
+        request = ChatRequest(
+            message="请解释这个知识点",
+            intent="tutor",
+            knowledge_node_id="k003",
+            knowledge_node_name="消息与通讯写作",
+        )
+        self.assertEqual(request.knowledge_node_id, "k003")
+        self.assertEqual(request.knowledge_node_name, "消息与通讯写作")
 
 
 if __name__ == "__main__":

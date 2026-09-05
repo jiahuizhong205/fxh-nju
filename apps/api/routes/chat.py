@@ -21,10 +21,13 @@ from services.security.input_guard import detect_injection
 router = APIRouter()
 
 
-def _mock_result(query: str, intent: str) -> dict:
+def _mock_result(query: str, intent: str, knowledge_context: dict | None = None) -> dict:
+    context_hint = ""
+    if knowledge_context and knowledge_context.get("name"):
+        context_hint = f"当前知识点：{knowledge_context['name']}（{knowledge_context.get('id', 'unknown')}）。\n"
     return {
         "answer": {
-            "content": f"【Mock 回复】已收到你的问题：「{query}」。\n\n当前为本地模拟模式（未接入 LLM），用于无 Ollama 环境下的功能测试。接入真实模型后将返回正式政策答疑。",
+            "content": f"【Mock 回复】已收到你的问题：「{query}」。\n{context_hint}\n当前为本地模拟模式（未接入 LLM），用于无 Ollama 环境下的功能测试。接入真实模型后将返回正式伴学答疑。",
             "citations": [],
         },
         "confidence": 0.0,
@@ -35,12 +38,20 @@ def _mock_result(query: str, intent: str) -> dict:
 SAFE_REPLY = "抱歉，检测到你的输入包含不符合使用规范的内容，我无法继续处理。如有疑问请联系管理员。"
 
 
-async def _stream_answer(db: AsyncSession, thread_id: UUID, query: str, conversation_id: UUID, intent: str = "policy"):
+async def _stream_answer(
+    db: AsyncSession,
+    thread_id: UUID,
+    query: str,
+    conversation_id: UUID,
+    intent: str = "policy",
+    knowledge_context: dict | None = None,
+):
     graph = RootGraph(db).compiled
 
     state: AssistantState = {
         "messages": [HumanMessage(content=query)],
         "intent": intent,
+        "knowledge_context": knowledge_context or {},
     }
 
     config = {"configurable": {"thread_id": str(thread_id)}}
@@ -56,7 +67,7 @@ async def _stream_answer(db: AsyncSession, thread_id: UUID, query: str, conversa
                 "warnings": ["输入触发安全策略"],
             }
         elif settings.mock_llm:
-            result = _mock_result(query, intent)
+            result = _mock_result(query, intent, knowledge_context)
         else:
             result = await graph.ainvoke(state, config)
     except Exception as e:
@@ -140,9 +151,20 @@ async def chat(
     await db.commit()
 
     thread_id = uuid4()
+    knowledge_context = {
+        "id": request.knowledge_node_id,
+        "name": request.knowledge_node_name,
+    }
 
     return StreamingResponse(
-        _stream_answer(db, thread_id, request.message, conversation_id, request.intent or "policy"),
+        _stream_answer(
+            db,
+            thread_id,
+            request.message,
+            conversation_id,
+            request.intent or "policy",
+            knowledge_context if any(knowledge_context.values()) else None,
+        ),
         media_type="text/event-stream",
         headers={
             "X-Conversation-Id": str(conversation_id),
