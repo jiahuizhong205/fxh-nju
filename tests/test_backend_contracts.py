@@ -85,6 +85,12 @@ class BackendContractTests(unittest.TestCase):
         content = main.read_text(encoding="utf-8")
         self.assertIn('allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"]', content)
 
+    def test_runtime_init_migrates_recommendation_report_stale_flag(self):
+        database = Path(__file__).parents[1] / "apps" / "api" / "database.py"
+        content = database.read_text(encoding="utf-8")
+        self.assertIn("ALTER TABLE recommendation_reports ADD COLUMN IF NOT EXISTS", content)
+        self.assertIn("is_stale BOOLEAN NOT NULL DEFAULT FALSE", content)
+
     def test_password_policy_accepts_eight_to_twenty_alphanumeric_password(self):
         for password in ("Abcdef12", "NJU2026ok", "A1" + "x" * 18):
             auth._validate_password(password)
