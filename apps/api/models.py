@@ -90,6 +90,19 @@ class StudentProfile(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
+class RecommendationReport(Base):
+    """保存一次推荐计算的输入快照和结果，支持追溯。"""
+
+    __tablename__ = "recommendation_reports"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    profile_version: Mapped[int] = mapped_column(default=0)
+    profile_snapshot: Mapped[dict] = mapped_column(JSON, default=dict)
+    recommendations: Mapped[list] = mapped_column(JSON, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
 class Conversation(Base):
     __tablename__ = "conversations"
 

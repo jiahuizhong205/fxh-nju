@@ -12,7 +12,7 @@ from fastapi import HTTPException
 from pydantic import ValidationError
 
 from apps.api import config
-from apps.api.models import Job, JobFavorite, LearningRecord, User, UserContact
+from apps.api.models import Job, JobFavorite, LearningRecord, RecommendationReport, User, UserContact
 from apps.api.routes import account
 from apps.api.routes import auth
 from apps.api.routes import planning
@@ -260,6 +260,17 @@ class BackendContractTests(unittest.TestCase):
         self.assertEqual(summary["in_progress_credits"], 2)
         self.assertEqual(summary["planned_credits"], 4)
         self.assertEqual(summary["total_credits"], 9)
+
+    def test_recommendation_report_keeps_profile_version_and_payload(self):
+        report = RecommendationReport(
+            user_id="00000000-0000-0000-0000-000000000001",
+            profile_version=3,
+            profile_snapshot={"major": "新闻学", "grade": "大二"},
+            recommendations=[{"program": {"name": "新闻学"}, "total_score": 86}],
+        )
+        self.assertEqual(report.profile_version, 3)
+        self.assertEqual(report.profile_snapshot["major"], "新闻学")
+        self.assertEqual(report.recommendations[0]["total_score"], 86)
 
 
 if __name__ == "__main__":

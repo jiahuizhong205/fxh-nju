@@ -3,13 +3,18 @@
 数据源已落库（Program/ProgramPlanItem/Job），REST 层从 DB 读。
 """
 
+import uuid
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.api.database import get_db
-from apps.api.models import StudentProfile, Program, ProgramPlanItem, Course, Job, JobFavorite, User
+from apps.api.models import (
+    StudentProfile, Program, ProgramPlanItem, Course, Job, JobFavorite,
+    RecommendationReport, User,
+)
 from apps.api.routes.auth import get_current_user
 from services.planning.recommendation_engine import recommend
 from services.planning.course_planner import generate_plan, PROGRAM_PLANS
@@ -102,7 +107,73 @@ async def recommend_programs(
     if not profile:
         raise HTTPException(status_code=400, detail="尚未填写学生画像")
     programs = [p for p in await _load_programs(db) if p["has_plan"]]
-    return {"recommendations": recommend(profile, programs)}
+    recommendations = recommend(profile, programs)
+    report = RecommendationReport(
+        user_id=user.id,
+        profile_version=profile.get("version", 0),
+        profile_snapshot=profile,
+        recommendations=recommendations,
+    )
+    db.add(report)
+    await db.commit()
+    await db.refresh(report)
+    return {
+        "report_id": str(report.id),
+        "generated_at": report.created_at.isoformat() if report.created_at else None,
+        "recommendations": recommendations,
+    }
+
+
+@router.get("/recommend/reports")
+async def list_recommendation_reports(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(RecommendationReport)
+        .where(RecommendationReport.user_id == user.id)
+        .order_by(RecommendationReport.created_at.desc())
+        .limit(20)
+    )
+    return {
+        "reports": [
+            {
+                "id": str(report.id),
+                "profile_version": report.profile_version,
+                "generated_at": report.created_at.isoformat() if report.created_at else None,
+                "recommendation_count": len(report.recommendations or []),
+            }
+            for report in result.scalars().all()
+        ]
+    }
+
+
+@router.get("/recommend/reports/{report_id}")
+async def get_recommendation_report(
+    report_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        report_uuid = uuid.UUID(report_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail="推荐报告不存在") from exc
+    result = await db.execute(
+        select(RecommendationReport).where(
+            RecommendationReport.id == report_uuid,
+            RecommendationReport.user_id == user.id,
+        )
+    )
+    report = result.scalar_one_or_none()
+    if not report:
+        raise HTTPException(status_code=404, detail="推荐报告不存在")
+    return {
+        "id": str(report.id),
+        "profile_version": report.profile_version,
+        "profile_snapshot": report.profile_snapshot or {},
+        "recommendations": report.recommendations or [],
+        "generated_at": report.created_at.isoformat() if report.created_at else None,
+    }
 
 
 @router.get("/programs/plan")
