@@ -9,13 +9,13 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.api.database import get_db
 from apps.api.models import (
     StudentProfile, Program, ProgramPlanItem, Course, Job, JobFavorite,
-    RecommendationReport, LearningPlan, JobApplication, User, utcnow,
+    RecommendationReport, LearningPlan, JobApplication, ProgramEnrollment, User, utcnow,
 )
 from apps.api.routes.auth import get_current_user
 from services.planning.recommendation_engine import recommend
@@ -81,6 +81,28 @@ async def _load_programs(db: AsyncSession) -> list[dict]:
     result = await db.execute(select(Program))
     progs = result.scalars().all()
     plan_names = set((await db.execute(select(ProgramPlanItem.program_name).distinct())).scalars())
+    course_counts = dict(
+        (row.program_name, row.course_count)
+        for row in (
+            await db.execute(
+                select(ProgramPlanItem.program_name, func.count(ProgramPlanItem.id).label("course_count"))
+                .group_by(ProgramPlanItem.program_name)
+            )
+        ).all()
+    )
+    participant_counts = dict(
+        (row.program_name, row.participant_count)
+        for row in (
+            await db.execute(
+                select(
+                    ProgramEnrollment.program_name,
+                    func.count(ProgramEnrollment.id).label("participant_count"),
+                )
+                .where(ProgramEnrollment.status == "active")
+                .group_by(ProgramEnrollment.program_name)
+            )
+        ).all()
+    )
     # Keep the currently supported built-in templates discoverable until the
     # corresponding database plan rows are imported. DB rows still take
     # precedence when present and are never overwritten here.
@@ -91,6 +113,8 @@ async def _load_programs(db: AsyncSession) -> list[dict]:
         "required_math": p.required_math, "required_math_level": p.required_math_level,
         "semesters_needed": p.semesters_needed, "discipline": p.discipline,
         "has_plan": p.name in plan_names,
+        "course_count": course_counts.get(p.name, len(p.core_courses or [])),
+        "participant_count": participant_counts.get(p.name, 0),
     } for p in progs]
 
 
@@ -123,6 +147,77 @@ async def _load_jobs(db: AsyncSession) -> list[dict]:
 @router.get("/programs")
 async def list_programs(db: AsyncSession = Depends(get_db)):
     return {"programs": await _load_programs(db)}
+
+
+async def _participant_count(db: AsyncSession, program_name: str) -> int:
+    result = await db.execute(
+        select(func.count(ProgramEnrollment.id)).where(
+            ProgramEnrollment.program_name == program_name,
+            ProgramEnrollment.status == "active",
+        )
+    )
+    return int(result.scalar_one())
+
+
+@router.get("/programs/{program_name}/participants")
+async def program_participants(program_name: str, db: AsyncSession = Depends(get_db)):
+    if not await db.get(Program, program_name):
+        raise HTTPException(status_code=404, detail=f"未找到「{program_name}」")
+    return {"program": program_name, "participant_count": await _participant_count(db, program_name)}
+
+
+@router.put("/programs/{program_name}/enrollment")
+async def join_program(
+    program_name: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if not await db.get(Program, program_name):
+        raise HTTPException(status_code=404, detail=f"未找到「{program_name}」")
+    result = await db.execute(
+        select(ProgramEnrollment).where(
+            ProgramEnrollment.user_id == user.id,
+            ProgramEnrollment.program_name == program_name,
+        )
+    )
+    enrollment = result.scalar_one_or_none()
+    if enrollment:
+        enrollment.status = "active"
+        enrollment.updated_at = utcnow()
+    else:
+        enrollment = ProgramEnrollment(user_id=user.id, program_name=program_name)
+        db.add(enrollment)
+    await db.commit()
+    return {
+        "program": program_name,
+        "joined": True,
+        "participant_count": await _participant_count(db, program_name),
+    }
+
+
+@router.delete("/programs/{program_name}/enrollment")
+async def leave_program(
+    program_name: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(ProgramEnrollment).where(
+            ProgramEnrollment.user_id == user.id,
+            ProgramEnrollment.program_name == program_name,
+        )
+    )
+    enrollment = result.scalar_one_or_none()
+    if not enrollment:
+        raise HTTPException(status_code=404, detail="尚未加入该方向")
+    enrollment.status = "left"
+    enrollment.updated_at = utcnow()
+    await db.commit()
+    return {
+        "program": program_name,
+        "joined": False,
+        "participant_count": await _participant_count(db, program_name),
+    }
 
 
 @router.post("/recommend")

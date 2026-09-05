@@ -162,6 +162,22 @@ class Program(Base):
     department: Mapped[str] = mapped_column(String(100), default="")  # 所属院系，对应 Course.department
 
 
+class ProgramEnrollment(Base):
+    """账号加入辅修方向的关系，用于统计真实参与人数。"""
+
+    __tablename__ = "program_enrollments"
+    __table_args__ = (
+        UniqueConstraint("user_id", "program_name", name="uq_program_enrollments_user_program"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    program_name: Mapped[str] = mapped_column(ForeignKey("programs.name", ondelete="CASCADE"))
+    status: Mapped[str] = mapped_column(String(20), default="active")  # active/left
+    joined_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
 class ProgramPlanItem(Base):
     __tablename__ = "program_plan_items"
 
