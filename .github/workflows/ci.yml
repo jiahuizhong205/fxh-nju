@@ -26,6 +26,9 @@ jobs:
       - name: Self-test
         run: PYTHONPATH=. python scripts/verify_core.py
 
+      - name: Backend contract tests
+        run: PYTHONPATH=. python -m unittest discover -s tests -p 'test_*.py'
+
   frontend:
     runs-on: ubuntu-latest
     defaults:
