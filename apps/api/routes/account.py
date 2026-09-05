@@ -18,6 +18,8 @@ from apps.api.routes.auth import get_current_user
 
 router = APIRouter()
 
+VERIFICATION_REQUEST_COOLDOWN_SECONDS = 60
+
 
 class ContactCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -108,6 +110,14 @@ def _new_verification_code() -> tuple[str, str, str]:
     code = f"{secrets.randbelow(1_000_000):06d}"
     salt = secrets.token_hex(16)
     return code, salt, _hash_verification_code(code, salt)
+
+
+def _challenge_request_allowed(created_at, now=None) -> bool:
+    """限制同一联系方式的验证码申请频率，避免供应商接口被刷。"""
+    if created_at is None:
+        return True
+    now = now or utcnow()
+    return (now - created_at).total_seconds() >= VERIFICATION_REQUEST_COOLDOWN_SECONDS
 
 
 def _verify_challenge_code(challenge: VerificationChallenge, code: str, now=None) -> tuple[bool, str]:
@@ -256,6 +266,20 @@ async def request_contact_verification_code(
     if contact.verified:
         return {"status": "already_verified", "contact": _serialize_contact(contact)}
 
+    latest_result = await db.execute(
+        select(VerificationChallenge)
+        .where(
+            VerificationChallenge.contact_id == contact.id,
+            VerificationChallenge.user_id == user.id,
+            _challenge_purpose_clause("contact_verification"),
+        )
+        .order_by(VerificationChallenge.created_at.desc())
+        .limit(1)
+    )
+    latest = latest_result.scalar_one_or_none()
+    if latest and not _challenge_request_allowed(latest.created_at):
+        raise HTTPException(status_code=429, detail="验证码发送过于频繁，请稍后再试")
+
     previous = await db.execute(
         select(VerificationChallenge).where(
             VerificationChallenge.contact_id == contact.id,
@@ -361,6 +385,15 @@ async def request_password_reset(
         ))
         contact = contact_result.scalar_one_or_none()
         if contact:
+            latest_result = await db.execute(select(VerificationChallenge).where(
+                VerificationChallenge.user_id == target.id,
+                VerificationChallenge.contact_id == contact.id,
+                _challenge_purpose_clause("password_reset"),
+            ).order_by(VerificationChallenge.created_at.desc()).limit(1))
+            latest = latest_result.scalar_one_or_none()
+            if latest and not _challenge_request_allowed(latest.created_at):
+                return {"status": "accepted", "message": "如果账号存在且联系方式已验证，验证码将进入投递队列"}
+
             previous = await db.execute(select(VerificationChallenge).where(
                 VerificationChallenge.user_id == target.id,
                 VerificationChallenge.contact_id == contact.id,

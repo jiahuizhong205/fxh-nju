@@ -410,6 +410,12 @@ class BackendContractTests(unittest.TestCase):
         self.assertEqual(account._verify_challenge_code(challenge, "000000")[1], "验证码错误")
         self.assertTrue(challenge.consumed)
 
+    def test_verification_challenge_request_has_cooldown(self):
+        now = utcnow()
+        self.assertFalse(account._challenge_request_allowed(now - timedelta(seconds=30), now=now))
+        self.assertTrue(account._challenge_request_allowed(now - timedelta(seconds=61), now=now))
+        self.assertTrue(account._challenge_request_allowed(None, now=now))
+
     def test_visibility_policy_is_conservative_for_friend_scope(self):
         self.assertTrue(profile._can_view_profile("仅自己", is_self=True, same_major=False))
         self.assertTrue(profile._can_view_profile("全校公开", is_self=False, same_major=False))
