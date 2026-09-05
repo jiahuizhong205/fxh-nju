@@ -1,10 +1,10 @@
 """政策答疑子图：意图分析 → 检索 → 校验引用 → 生成回答。"""
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 
 from langgraph.graph import StateGraph, START, END
-from langchain_openai import ChatOpenAI
-from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.api.config import settings
@@ -18,7 +18,9 @@ class PolicyAgent:
     llm: ChatOpenAI | None = None
 
     def __post_init__(self):
-        if self.llm is None:
+        if self.llm is None and not settings.mock_llm:
+            from langchain_openai import ChatOpenAI
+
             self.llm = ChatOpenAI(
                 base_url=settings.llm_base_url,
                 api_key=settings.llm_api_key,
@@ -69,6 +71,8 @@ class PolicyAgent:
         } for e in evidence]
 
         ctx = build_context(chunk_dicts)
+
+        from langchain_core.messages import HumanMessage, SystemMessage
 
         system = SystemMessage(content=f"""你是南京大学辅修政策答疑助手"福小禾"。请根据以下政策文档回答用户问题。
 

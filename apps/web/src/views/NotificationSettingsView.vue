@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { onMounted, ref } from 'vue'
+import { fetchPreferences, savePreferences } from '../api/client'
+import BackButton from '../components/BackButton.vue'
 
 const settings = ref([
   { icon: '📚', label: '学习浇水提醒', desc: '每周学习计划推送', on: true },
@@ -8,16 +10,45 @@ const settings = ref([
   { icon: '🧭', label: '推荐报告完成', desc: '辅修推荐报告生成通知', on: false },
   { icon: '📅', label: '课表冲突预警', desc: '新学期排课冲突提醒', on: true },
 ])
+const saving = ref(false)
+const saved = ref(false)
+const error = ref('')
+
+onMounted(async () => {
+  try {
+    const preferences = await fetchPreferences()
+    const notifications = preferences.notifications as Record<string, boolean> | undefined
+    if (notifications) {
+      settings.value.forEach(s => {
+        if (typeof notifications[s.label] === 'boolean') s.on = notifications[s.label]
+      })
+    }
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : '通知偏好加载失败。'
+  }
+})
+
+async function save() {
+  saving.value = true
+  saved.value = false
+  error.value = ''
+  try {
+    const preferences = await fetchPreferences()
+    preferences.notifications = Object.fromEntries(settings.value.map(s => [s.label, s.on]))
+    await savePreferences(preferences)
+    saved.value = true
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : '通知偏好保存失败。'
+  } finally {
+    saving.value = false
+  }
+}
 </script>
 
 <template>
   <div class="page">
     <header class="page-head">
-      <router-link to="/profile" class="back">
-        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="m15 18-6-6 6-6"/>
-        </svg>
-      </router-link>
+      <BackButton fallback="/profile" />
       <h2>通知设置</h2>
     </header>
 
@@ -25,7 +56,7 @@ const settings = ref([
 
     <p class="page-sub">风铃要响几声？ 🌿</p>
 
-    <section class="card" style="padding: 0; overflow: hidden;">
+    <section class="notification-card">
       <div v-for="s in settings" :key="s.label" class="row">
         <span class="row-icon">{{ s.icon }}</span>
         <div class="row-main">
@@ -38,7 +69,9 @@ const settings = ref([
       </div>
     </section>
 
-    <button class="btn-primary">保存风铃偏好</button>
+    <button class="btn-primary" :disabled="saving" @click="save">{{ saving ? '保存中…' : '保存风铃偏好' }}</button>
+    <p v-if="saved" class="status">已保存到当前账号</p>
+    <p v-if="error" class="error">{{ error }}</p>
     <p class="foot">关闭后，对应消息将不再通过风铃通知你 🌿</p>
   </div>
 </template>
@@ -47,11 +80,20 @@ const settings = ref([
 .page-sub { font-size: var(--text-sm); color: var(--text-muted); margin-bottom: var(--space-2); }
 .illus { display: flex; justify-content: center; margin: var(--space-2) 0 var(--space-3); }
 .illus img { width: 100%; max-width: 390px; height: auto; }
-.row { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-4); border-bottom: 1px solid var(--bg-subtle); }
+.notification-card { padding: var(--space-2) var(--space-4); background: var(--bg-green-faint); border: 1px solid var(--bg-green-soft); border-radius: var(--radius-lg); }
+.row { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3) 0; border-bottom: 1px solid var(--bg-green-soft); }
 .row:last-child { border-bottom: none; }
-.row-icon { font-size: var(--text-xl); flex-shrink: 0; }
+.row-icon { width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border-radius: var(--radius-full); background: var(--bg-surface); font-size: var(--text-xl); flex-shrink: 0; }
+.row:nth-child(1) .row-icon { background: var(--bg-green-soft); }
+.row:nth-child(2) .row-icon { background: var(--bg-pink-soft); }
+.row:nth-child(3) .row-icon { background: var(--bg-green-soft); }
+.row:nth-child(4) .row-icon { background: var(--accent-purple-soft); }
+.row:nth-child(5) .row-icon { background: var(--bg-subtle); }
 .row-main { flex: 1; }
 .row-label { font-size: var(--text-base); color: var(--text-primary); }
 .row-desc { margin-top: 2px; font-size: var(--text-xs); color: var(--text-muted); }
 .foot { text-align: center; font-size: var(--text-xs); color: var(--text-muted); }
+.status, .error { text-align: center; font-size: var(--text-sm); }
+.status { color: var(--brand-strong); }
+.error { color: var(--accent-purple); }
 </style>

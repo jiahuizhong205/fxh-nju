@@ -80,9 +80,44 @@ uvicorn apps.api.main:app --reload --port 8000
 cd apps/web && npm install && npm run dev
 ```
 
+### 可选：启动通知 worker
+
+通知 worker 负责按账号生成到期学习提醒、重试验证码投递，并投递已经入队的外部通知。未配置
+`NOTIFICATION_PROVIDER_URL` 时不会访问外部网络，外部通知会保持 `queued`，因此
+mock 开发不需要短信、邮件或本地大模型。
+
+```bash
+PYTHONPATH=. python scripts/notification_worker.py
+```
+
+Docker Compose 已包含同一个 `notification-worker` 服务；如需接入自有 webhook
+供应商，可在 `.env` 中配置 `NOTIFICATION_PROVIDER_URL`、可选的
+`NOTIFICATION_PROVIDER_API_KEY` 和 `NOTIFICATION_WORKER_INTERVAL_SECONDS`。验证码
+投递使用 `VERIFICATION_PROVIDER_URL` 与可选的 `VERIFICATION_PROVIDER_API_KEY`，失败
+后最多按退避规则重试 3 次。provider 返回 `message_id` 后，可向
+`/api/v1/auth/verification/provider-callback` 携带 `X-Verification-Provider-Secret`
+回传 `delivered`、`failed` 等状态，服务端会更新对应投递记录。
+
+反馈附件默认使用本地文件签名校验和数据库存储。生产环境可配置
+`FEEDBACK_SCAN_URL`（扫描 gateway 接收 multipart 字段 `file`，返回
+`{"clean": true}` 或 `{"status": "clean"}`）以及 `FEEDBACK_STORAGE_URL`
+（上传后返回 `{"key": "..."}`，下载时使用同一地址加 key）；两者均可配对应的
+`*_API_KEY`。任一服务不可用时，接口会拒绝本次附件，不会留下半成品记录。
+
+数据同步默认只保留本地快照与检查点。生产环境可配置 `SYNC_PROVIDER_URL` 和可选的
+`SYNC_PROVIDER_API_KEY`，调用 `/api/v1/sync/provider/push` 或启动 Compose 中的
+`sync-worker` 将脱敏快照推送到云端。provider 可在响应中返回另一端快照，服务端会把它
+交给前端继续走“预览/确认导入”，不会未经确认覆盖本地数据；`SYNC_WORKER_INTERVAL_SECONDS`
+控制自动推送周期。也可调用 `/api/v1/sync/provider/pull` 主动获取远端快照；正式冲突
+合并仍通过现有 `/api/v1/sync/import` 的确认流程完成，可选择默认的 `remote_wins`
+或保留本地数据的 `keep_local` 策略。
+
 ## 接入真实 LLM / Embedding（可选）
 
-默认 `MOCK_LLM=true`，后端对问答走 mock 回复，**无需任何 LLM** 即可跑通确定性功能（画像、推荐、课程规划、岗位、落库、检索端点、安全策略）。要启用真实智能问答与向量检索，接入一个 OpenAI 兼容服务后改 `.env` 并重启后端：
+默认 `MOCK_LLM=true`，后端对问答走 mock 回复，且 mock 模式不会加载本地模型，embedding 使用确定性回退向量，**无需任何 LLM 或外部服务** 即可跑通确定性功能（画像、推荐、课程规划、岗位、落库、检索端点、安全策略）。要启用真实智能问答与向量检索，接入一个 OpenAI 兼容服务后改 `.env` 并重启后端：
+
+Docker 默认不会安装 `sentence-transformers`、torch 或 CUDA；需要使用本地缓存 embedding
+模型时，再额外安装 `requirements.ai.txt`，不会影响 mock 开发路径。
 
 | 变量 | 含义 | 示例（硅基流动） |
 |------|------|------------------|

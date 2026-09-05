@@ -33,6 +33,18 @@ def _to_float(v, default=0.0):
         return default
 
 
+def _to_schedule(course: dict) -> list[dict]:
+    schedule = []
+    for item in course.get("teachingTimeList") or []:
+        schedule.append({
+            "day": _to_int(item.get("dayOfWeek")),
+            "start": _to_int(item.get("beginSection")),
+            "end": _to_int(item.get("endSection")),
+            "week": item.get("weekName") or "",
+        })
+    return schedule
+
+
 def _to_course(c: dict) -> Course:
     # ponytail: 接口数值字段全是字符串，需安全转换；选课名额(已选/容量/满员)是选课时用的，不入库
     return Course(
@@ -47,6 +59,7 @@ def _to_course(c: dict) -> Course:
         department=c.get("departmentName") or "",
         teaching_place=c.get("teachingPlace") or "",
         school_term=c.get("schoolTerm") or "",
+        schedule=_to_schedule(c),
         source=SOURCE,
     )
 

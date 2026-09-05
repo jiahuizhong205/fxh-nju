@@ -2,12 +2,12 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential curl \
-    && rm -rf /var/lib/apt/lists/*
-
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# MOCK_LLM 默认开启，sentence-transformers 会额外拉取 torch/CUDA 依赖；
+# 本镜像使用确定性 embedding 回退，真实 embedding 运行环境另行安装 requirements.ai.txt。
+RUN grep -viE '^sentence-transformers' requirements.txt > /tmp/requirements.runtime.txt \
+    && pip install --no-cache-dir -r /tmp/requirements.runtime.txt \
+    && rm /tmp/requirements.runtime.txt
 
 COPY . .
 

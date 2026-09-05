@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.api.config import settings
 from apps.api.database import async_session, init_db
-from apps.api.routes import auth, chat, knowledge, profile, planning
+from apps.api.routes import account, auth, cache, chat, feedback, knowledge, meta, notifications, preferences, profile, planning, sync
 from apps.api.middleware import (
     RateLimitMiddleware,
     SecurityHeadersMiddleware,
@@ -47,9 +47,11 @@ app = FastAPI(
 # CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000"],
+    allow_origins=[
+        "http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:3000",
+    ],
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
     allow_headers=["Content-Type", "Authorization", "X-Trace-Id"],
 )
 
@@ -64,10 +66,17 @@ app.add_middleware(
 )
 
 app.include_router(auth.router, prefix="/api/v1", tags=["auth"])
+app.include_router(account.router, prefix="/api/v1", tags=["account"])
 app.include_router(chat.router, prefix="/api/v1", tags=["chat"])
 app.include_router(knowledge.router, prefix="/api/v1", tags=["knowledge"])
 app.include_router(profile.router, prefix="/api/v1", tags=["profile"])
+app.include_router(preferences.router, prefix="/api/v1", tags=["preferences"])
+app.include_router(feedback.router, prefix="/api/v1", tags=["feedback"])
 app.include_router(planning.router, prefix="/api/v1", tags=["planning"])
+app.include_router(sync.router, prefix="/api/v1", tags=["sync"])
+app.include_router(notifications.router, prefix="/api/v1", tags=["notifications"])
+app.include_router(cache.router, prefix="/api/v1", tags=["cache"])
+app.include_router(meta.router, prefix="/api/v1", tags=["meta"])
 
 
 @app.get("/api/health")

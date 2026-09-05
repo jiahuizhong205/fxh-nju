@@ -1,0 +1,5 @@
+ALTER TABLE sync_records
+    ADD COLUMN IF NOT EXISTS last_request_id VARCHAR(64) NOT NULL DEFAULT '';
+
+ALTER TABLE sync_records
+    ADD COLUMN IF NOT EXISTS retry_count INTEGER NOT NULL DEFAULT 0;

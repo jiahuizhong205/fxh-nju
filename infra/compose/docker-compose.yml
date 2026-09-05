@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   postgres:
     image: pgvector/pgvector:pg16
@@ -38,12 +36,74 @@ services:
       DATABASE_URL: postgresql+asyncpg://fuxiaohe:fuxiaohe_dev@postgres:5432/fuxiaohe
       REDIS_URL: redis://redis:6379/0
       EMBEDDING_MODEL: BAAI/bge-small-zh-v1.5
+      MOCK_LLM: ${MOCK_LLM:-true}
       LLM_BASE_URL: ${LLM_BASE_URL:-http://host.docker.internal:11434/v1}
       LLM_MODEL: ${LLM_MODEL:-qwen2.5:7b}
+      VERIFICATION_PROVIDER_URL: ${VERIFICATION_PROVIDER_URL:-}
+      VERIFICATION_PROVIDER_API_KEY: ${VERIFICATION_PROVIDER_API_KEY:-}
+      VERIFICATION_PROVIDER_WEBHOOK_SECRET: ${VERIFICATION_PROVIDER_WEBHOOK_SECRET:-}
+      NOTIFICATION_PROVIDER_URL: ${NOTIFICATION_PROVIDER_URL:-}
+      NOTIFICATION_PROVIDER_API_KEY: ${NOTIFICATION_PROVIDER_API_KEY:-}
+      FEEDBACK_SCAN_URL: ${FEEDBACK_SCAN_URL:-}
+      FEEDBACK_SCAN_API_KEY: ${FEEDBACK_SCAN_API_KEY:-}
+      FEEDBACK_STORAGE_URL: ${FEEDBACK_STORAGE_URL:-}
+      FEEDBACK_STORAGE_API_KEY: ${FEEDBACK_STORAGE_API_KEY:-}
+      SYNC_PROVIDER_URL: ${SYNC_PROVIDER_URL:-}
+      SYNC_PROVIDER_API_KEY: ${SYNC_PROVIDER_API_KEY:-}
     volumes:
       - ../../apps/api:/app/apps/api
       - ../../services:/app/services
       - ../../packages:/app/packages
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  notification-worker:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.api
+    command: ["python", "scripts/notification_worker.py"]
+    environment:
+      DATABASE_URL: postgresql+asyncpg://fuxiaohe:fuxiaohe_dev@postgres:5432/fuxiaohe
+      REDIS_URL: redis://redis:6379/0
+      PYTHONPATH: /app
+      MOCK_LLM: ${MOCK_LLM:-true}
+      NOTIFICATION_PROVIDER_URL: ${NOTIFICATION_PROVIDER_URL:-}
+      NOTIFICATION_PROVIDER_API_KEY: ${NOTIFICATION_PROVIDER_API_KEY:-}
+      NOTIFICATION_WORKER_INTERVAL_SECONDS: ${NOTIFICATION_WORKER_INTERVAL_SECONDS:-60}
+      VERIFICATION_PROVIDER_URL: ${VERIFICATION_PROVIDER_URL:-}
+      VERIFICATION_PROVIDER_API_KEY: ${VERIFICATION_PROVIDER_API_KEY:-}
+      VERIFICATION_PROVIDER_WEBHOOK_SECRET: ${VERIFICATION_PROVIDER_WEBHOOK_SECRET:-}
+    volumes:
+      - ../../apps/api:/app/apps/api
+      - ../../services:/app/services
+      - ../../packages:/app/packages
+      - ../../scripts:/app/scripts
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  sync-worker:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.api
+    command: ["python", "scripts/sync_worker.py"]
+    environment:
+      DATABASE_URL: postgresql+asyncpg://fuxiaohe:fuxiaohe_dev@postgres:5432/fuxiaohe
+      REDIS_URL: redis://redis:6379/0
+      PYTHONPATH: /app
+      SYNC_PROVIDER_URL: ${SYNC_PROVIDER_URL:-}
+      SYNC_PROVIDER_API_KEY: ${SYNC_PROVIDER_API_KEY:-}
+      SYNC_WORKER_INTERVAL_SECONDS: ${SYNC_WORKER_INTERVAL_SECONDS:-300}
+    volumes:
+      - ../../apps/api:/app/apps/api
+      - ../../services:/app/services
+      - ../../packages:/app/packages
+      - ../../scripts:/app/scripts
     depends_on:
       postgres:
         condition: service_healthy

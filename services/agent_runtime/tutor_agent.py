@@ -1,10 +1,10 @@
 """伴学子图——知识树生成 → 讲解 → 测验 → 进度。"""
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 
 from langgraph.graph import StateGraph, START, END
-from langchain_openai import ChatOpenAI
-from langchain_core.messages import HumanMessage, SystemMessage
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -30,7 +30,9 @@ class TutorAgent:
     llm: ChatOpenAI | None = None
 
     def __post_init__(self):
-        if self.llm is None:
+        if self.llm is None and not settings.mock_llm:
+            from langchain_openai import ChatOpenAI
+
             self.llm = ChatOpenAI(
                 base_url=settings.llm_base_url,
                 api_key=settings.llm_api_key,
@@ -50,6 +52,7 @@ class TutorAgent:
 
         messages = state.get("messages", [])
         query = messages[-1].content if messages else ""
+        knowledge_context = state.get("knowledge_context", {})
 
         # 判断模式
         mode = "self_study" if "自学" in query else "enrolled"
@@ -59,6 +62,7 @@ class TutorAgent:
         return {
             "user_profile": profile,
             "_tutor_mode": mode,
+            "_knowledge_context": knowledge_context,
         }
 
     async def build_knowledge_tree(self, state: AssistantState) -> dict:
@@ -91,6 +95,7 @@ class TutorAgent:
         messages = state.get("messages", [])
         query = messages[-1].content if messages else "请开始伴学"
         mode = state.get("_tutor_mode", "self_study")
+        knowledge_context = state.get("_knowledge_context", {})
 
         nodes = tree.get("nodes", [])
         edges = tree.get("edges", [])
@@ -107,10 +112,15 @@ class TutorAgent:
         )
 
         mode_text = "在校辅修模式——结合主修教材做跨学科讲解" if mode == "enrolled" else "独立自学模式——强调自学路线和资源"
+        context_text = (
+            f"当前用户点击的知识点：{knowledge_context.get('name')}（节点 {knowledge_context.get('id')}）"
+            if knowledge_context.get("name") else "当前没有指定知识点"
+        )
 
         prompt = f"""学生主修: {profile.get('major', '未知')}
 模式: {mode_text}
 学生问题: {query}
+{context_text}
 
 知识点树:
 {kp_list or '(暂无可展示的知识点)'}
@@ -123,6 +133,8 @@ class TutorAgent:
 2. 按先修顺序推荐学习路径
 3. 对每个阶段提出一个可操作的学习任务
 4. 语气鼓励、像学长学姐一样"""
+
+        from langchain_core.messages import HumanMessage, SystemMessage
 
         response = await self.llm.ainvoke([
             SystemMessage(content=TUTOR_SYSTEM),

@@ -11,7 +11,7 @@ const tabs = [
 ]
 
 function isActive(path: string) {
-  return route.path === path
+  return path === '/' ? route.path === '/' : route.path.startsWith(path)
 }
 </script>
 
@@ -20,7 +20,7 @@ function isActive(path: string) {
     <RouterView />
   </div>
   <div v-else class="app">
-    <header class="app-header">
+    <header v-if="route.name !== 'recommend' && route.name !== 'course-planning' && route.name !== 'job-detail' && route.name !== 'minor-report' && route.name !== 'clear-cache' && route.name !== 'data-sync' && route.name !== 'about' && route.name !== 'learning-progress' && route.name !== 'change-password' && route.name !== 'feedback'" class="app-header">
       <h1>福小禾</h1>
       <span class="subtitle">南大复合型人才学习助手</span>
     </header>
@@ -75,8 +75,8 @@ body {
   box-shadow: none;
 }
 
-.app-header {
-  display: flex;
+.app.app .app-header {
+  display: flex !important;
   align-items: baseline;
   gap: 8px;
   padding: 14px 16px;
@@ -100,9 +100,9 @@ body {
   overflow-y: auto;
 }
 
-.tab-bar {
+.app.app .tab-bar {
   flex-shrink: 0;
-  display: flex;
+  display: flex !important;
   background: var(--bg-surface);
   border-top: 1px solid var(--border);
 }

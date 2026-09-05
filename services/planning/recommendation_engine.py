@@ -98,8 +98,10 @@ def hard_filter(program: dict, profile: dict) -> FilterResult:
         if "苏州" in prog_campus or "苏州" in user_campus:
             reasons.append(f"{prog_campus}与{user_campus}不可通勤")
 
-    # 数学门槛
-    if program.get("required_math") and not profile.get("math_willingness", False):
+    # 数学门槛：已修并通过高数时，不再要求用户重新确认愿修意愿。
+    completed_courses = profile.get("completed_courses", [])
+    math_completed = any("高等数学" in course or "高数" in course for course in completed_courses)
+    if program.get("required_math") and not profile.get("math_willingness", False) and not math_completed:
         certificate = profile.get("certificate_goal", "")
         if certificate == "degree":
             reasons.append(f"需要修读{program['required_math_level']}，但用户不接受修高数")
@@ -156,7 +158,11 @@ def score_program(program: dict, profile: dict) -> ScoreResult:
     # prerequisite_readiness (0.20) — 文科生选理科扣分
     arts_majors = ["文学", "历史", "哲学", "外语", "新闻", "中文", "汉语言", "社会学"]
     is_arts = any(m in profile.get("major", "") for m in arts_majors)
-    if program.get("required_math") and is_arts:
+    completed_courses = profile.get("completed_courses", [])
+    math_completed = any("高等数学" in course or "高数" in course for course in completed_courses)
+    if program.get("required_math") and math_completed:
+        scores["prerequisite_readiness"] = 0.9
+    elif program.get("required_math") and is_arts:
         scores["prerequisite_readiness"] = 0.2
         risks.append(f"文科跨理科辅修，前置知识差距大")
     elif program.get("required_math") and not is_arts:
@@ -193,6 +199,23 @@ def score_program(program: dict, profile: dict) -> ScoreResult:
     )
 
 
+def _build_explanation(program: dict, profile: dict, scores: dict, filter_reasons: list[str]) -> list[str]:
+    """把评分规则转换成可展示、可追溯的解释。"""
+    explanations = []
+    if scores.get("interest_fit", 0) >= 0.7:
+        explanations.append("与你填写的兴趣方向匹配")
+    elif scores.get("interest_fit", 0) <= 0.3:
+        explanations.append("当前兴趣方向与该专业匹配较弱")
+    if scores.get("career_fit", 0) >= 0.7:
+        explanations.append("与你填写的职业目标匹配")
+    if profile.get("completed_courses") and scores.get("prerequisite_readiness", 0) >= 0.8:
+        explanations.append("已修课程为部分先修判断提供支持")
+    if scores.get("campus_feasibility", 0) >= 0.8:
+        explanations.append("校区安排与当前偏好较适配")
+    explanations.extend(f"注意：{reason}" for reason in filter_reasons)
+    return explanations or ["根据当前画像的综合评分生成"]
+
+
 def recommend(profile: dict, programs: list[dict] | None = None) -> list[dict]:
     """执行硬过滤 + 评分排序，返回 Top-N 推荐。"""
     programs = programs or PROGRAMS
@@ -207,6 +230,7 @@ def recommend(profile: dict, programs: list[dict] | None = None) -> list[dict]:
             "scores": scored.scores,
             "total_score": scored.total,
             "risks": scored.risk_items + [r for r in filt.reasons if "建议" in r],
+            "explanation": _build_explanation(prog, profile, scored.scores, filt.reasons),
         })
 
     results.sort(key=lambda x: x["total_score"], reverse=True)

@@ -9,11 +9,16 @@ from apps.api.config import settings
 # ponytail: local embedding first, fall back to API if model unavailable (e.g. no HF access)
 _embedding_model = None
 _use_api = False
+_placeholder_only = False
 
 
 def _init_local_model():
-    global _embedding_model, _use_api
-    if _embedding_model is not None or _use_api:
+    global _embedding_model, _use_api, _placeholder_only
+    if _embedding_model is not None or _use_api or _placeholder_only:
+        return
+    # mock 模式不加载任何本地模型，也不因缺少外部 embedding 服务阻塞启动。
+    if settings.mock_llm:
+        _placeholder_only = True
         return
     # 仅尝试本地缓存，不触发下载（国内 HF 不通会卡很久）
     try:
@@ -25,6 +30,8 @@ def _init_local_model():
 
 def embed_text(text: str) -> list[float]:
     _init_local_model()
+    if _placeholder_only:
+        return _placeholder_embedding(text)
     if _use_api:
         try:
             return _embed_via_api(text)

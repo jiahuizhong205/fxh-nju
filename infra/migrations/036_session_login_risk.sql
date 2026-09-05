@@ -1,0 +1,5 @@
+ALTER TABLE user_sessions
+    ADD COLUMN IF NOT EXISTS risk_level VARCHAR(20) NOT NULL DEFAULT 'normal';
+
+ALTER TABLE user_sessions
+    ADD COLUMN IF NOT EXISTS risk_reason VARCHAR(50) NOT NULL DEFAULT '';

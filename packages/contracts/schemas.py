@@ -26,6 +26,8 @@ class ChatRequest(BaseModel):
     message: str
     thread_id: UUID | None = None
     intent: str | None = None  # policy / recommend / schedule / tutor / career
+    knowledge_node_id: str | None = Field(default=None, max_length=64)
+    knowledge_node_name: str | None = Field(default=None, max_length=200)
 
 
 class ChatEvent(BaseModel):

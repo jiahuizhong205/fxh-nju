@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { fetchProfile, saveProfile, updateNickname } from '../api/client'
+import { fetchProfile, fetchPrograms, updateProfile, updateNickname } from '../api/client'
 import { useAuthStore } from '../stores/auth'
+import BackButton from '../components/BackButton.vue'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -18,6 +19,9 @@ const mathWillingness = ref(false)
 const campusFlexibility = ref(false)
 const creditBudget = ref(0)
 const certificateGoal = ref('none')
+const majors = ref<string[]>([])
+const avatarSrc = ref('/illustrations/avatar-wreath.png')
+const avatarInput = ref<HTMLInputElement | null>(null)
 
 const grades = ['大一', '大二', '大三', '大四']
 const campuses = ['仙林校区', '鼓楼校区', '苏州校区']
@@ -31,7 +35,8 @@ const certificateOptions = [
 
 onMounted(async () => {
   nickname.value = auth.user?.nickname || ''
-  const p = await fetchProfile()
+  const [p, programs] = await Promise.all([fetchProfile(), fetchPrograms()])
+  majors.value = programs.map(program => program.name)
   if (!p) return
   major.value = p.major
   grade.value = p.grade
@@ -44,6 +49,15 @@ onMounted(async () => {
   creditBudget.value = p.credit_budget
   certificateGoal.value = p.certificate_goal || 'none'
 })
+
+function chooseAvatar() {
+  avatarInput.value?.click()
+}
+
+function handleAvatarChange(event: Event) {
+  const file = (event.target as HTMLInputElement).files?.[0]
+  if (file) avatarSrc.value = URL.createObjectURL(file)
+}
 
 function toggle(list: string[], label: string) {
   const i = list.indexOf(label)
@@ -67,7 +81,7 @@ async function save() {
     alert(e.message)
     return
   }
-  await saveProfile({
+  await updateProfile({
     major: major.value,
     grade: grade.value,
     campus: campus.value,
@@ -84,31 +98,35 @@ async function save() {
 </script>
 
 <template>
-  <div class="page">
+  <div class="page edit-profile-page">
     <header class="page-head">
-      <router-link to="/profile" class="back">
-        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="m15 18-6-6 6-6"/>
-        </svg>
-      </router-link>
-      <h2>编辑个人资料</h2>
+      <BackButton fallback="/profile" />
+      <div>
+        <h2>编辑个人资料 🍃</h2>
+        <p>我的园丁卡片 🌿</p>
+      </div>
     </header>
 
-    <p class="page-sub">我的园丁卡片 🌿</p>
-
-    <section class="card avatar-row">
-      <img class="avatar" src="/illustrations/avatar-wreath.png" alt="头像" />
-      <button class="btn-avatar">点击更换园丁头像</button>
+    <section class="avatar-section">
+      <button type="button" class="avatar-button" aria-label="更换园丁头像" @click="chooseAvatar">
+        <img class="avatar" :src="avatarSrc" alt="头像" />
+        <span class="avatar-camera" aria-hidden="true">▣</span>
+      </button>
+      <input ref="avatarInput" class="avatar-input" type="file" accept="image/*" @change="handleAvatarChange" />
+      <button type="button" class="avatar-hint" @click="chooseAvatar">点击更换园丁头像</button>
     </section>
 
-    <section class="card">
+    <section class="profile-fields">
       <div class="form-field">
         <label>昵称</label>
         <input v-model="nickname" placeholder="给自己起个好听的称呼" maxlength="50" />
       </div>
       <div class="form-field">
         <label>主修专业</label>
-        <input v-model="major" placeholder="请输入主修专业" />
+        <select v-model="major" :disabled="!majors.length">
+          <option disabled value="">请选择你的主修专业</option>
+          <option v-for="m in majors" :key="m" :value="m">{{ m }}</option>
+        </select>
       </div>
       <div class="form-field">
         <label>年级</label>
@@ -124,21 +142,22 @@ async function save() {
       </div>
     </section>
 
-    <section class="card">
-      <h4 class="card-title">兴趣方向 ☀️</h4>
+    <section class="profile-group interest-group">
+      <h4 class="group-title">你选择的辅修专业阳光☀️</h4>
       <div class="chips">
         <button v-for="m in interestOptions" :key="m" class="chip" :class="{ selected: interests.includes(m) }" @click="toggle(interests, m)">{{ m }}</button>
       </div>
     </section>
 
-    <section class="card">
-      <h4 class="card-title">擅长技能 🌱</h4>
+    <section class="profile-group strength-group">
+      <h4 class="group-title">你最擅长的园艺技能 🌱</h4>
       <div class="chips">
         <button v-for="s in strengthOptions" :key="s" class="chip" :class="{ selected: strengths.includes(s) }" @click="toggle(strengths, s)">{{ s }}</button>
       </div>
     </section>
 
-    <section class="card">
+    <details class="advanced-section">
+      <summary>更多画像信息</summary>
       <div class="form-field">
         <label>职业目标</label>
         <input v-model="careerGoals" placeholder="例如：想进入互联网内容生态 / 科技传播领域" />
@@ -161,7 +180,7 @@ async function save() {
           <option v-for="o in certificateOptions" :key="o.value" :value="o.value">{{ o.label }}</option>
         </select>
       </div>
-    </section>
+    </details>
 
     <button class="btn-primary" @click="save">保存园丁卡片</button>
     <p class="foot">你的信息仅用于福小禾提供个性化推荐，不会对外展示 🍀</p>
@@ -169,10 +188,31 @@ async function save() {
 </template>
 
 <style scoped>
-.avatar-row { display: flex; align-items: center; gap: var(--space-4); }
-.avatar { width: 92px; height: 92px; border-radius: var(--radius-full); object-fit: cover; flex-shrink: 0; }
-.btn-avatar { padding: var(--space-2) var(--space-3); border: 1px solid var(--border); background: #fff; border-radius: var(--radius-md); font-size: var(--text-sm); color: var(--text-secondary); cursor: pointer; font-family: inherit; }
+.edit-profile-page { position: relative; gap: var(--space-5); padding-top: var(--space-5); }
+.page-head h2 { color: var(--text-primary); font-size: var(--text-2xl); }
+.page-head p { margin-top: var(--space-1); color: var(--brand-strong); font-size: var(--text-sm); }
+.avatar-section { display: flex; flex-direction: column; align-items: center; gap: var(--space-2); }
+.avatar-button { position: relative; width: 108px; height: 108px; padding: 5px; border: 2px dashed var(--brand); border-radius: var(--radius-full); background: transparent; cursor: pointer; }
+.avatar { width: 100%; height: 100%; border-radius: var(--radius-full); object-fit: cover; display: block; }
+.avatar-camera { position: absolute; right: -4px; bottom: -1px; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; border: 3px solid var(--bg-page); border-radius: var(--radius-full); background: var(--brand-strong); color: #fff; font-size: var(--text-sm); }
+.avatar-input { display: none; }
+.avatar-hint { border: none; background: transparent; color: var(--brand-strong); font: inherit; font-size: var(--text-sm); font-weight: var(--weight-semibold); cursor: pointer; }
+.profile-fields { display: flex; flex-direction: column; gap: var(--space-1); }
+.profile-fields .form-field { margin-bottom: var(--space-3); }
+.profile-fields .form-field:last-child { margin-bottom: 0; }
+.profile-fields .form-field input, .profile-fields .form-field select { min-height: 52px; border: 1px solid var(--bg-green-soft); border-radius: var(--radius-full); background: var(--bg-surface); font-size: var(--text-md); }
+.profile-fields .form-field select { appearance: auto; }
 .chips { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.profile-group { padding-top: var(--space-1); }
+.group-title { margin-bottom: var(--space-3); font-size: var(--text-base); font-weight: var(--weight-semibold); }
+.interest-group .group-title { color: var(--accent-purple); }
+.strength-group .group-title { color: var(--brand-strong); }
+.profile-group .chip { padding: var(--space-2) var(--space-3); }
+.interest-group .chip.selected { background: var(--accent-purple-soft); border-color: var(--accent-purple); color: var(--accent-purple); }
+.strength-group .chip.selected { background: var(--bg-green-soft); border-color: var(--brand); color: var(--brand-strong); }
+.advanced-section { padding: var(--space-3) var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--bg-surface); }
+.advanced-section summary { color: var(--text-secondary); font-size: var(--text-sm); font-weight: var(--weight-semibold); cursor: pointer; }
+.advanced-section[open] summary { margin-bottom: var(--space-4); color: var(--brand-strong); }
 .switch-row { display: flex; align-items: center; justify-content: space-between; padding: var(--space-2) 0; }
 .switch-label { font-size: var(--text-sm); color: var(--text-secondary); }
 .foot { text-align: center; font-size: var(--text-xs); color: var(--text-muted); margin-top: var(--space-2); }

@@ -1,25 +1,24 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { fetchProfile, logout, type StudentProfile } from '../api/client'
+import { fetchProfile, getFavoriteJobIds, logout, type StudentProfile } from '../api/client'
 import { useAuthStore } from '../stores/auth'
+import BackButton from '../components/BackButton.vue'
 
 const router = useRouter()
 const auth = useAuthStore()
 const profile = ref<StudentProfile | null>(null)
 const loading = ref(true)
+const favoriteCount = ref(0)
 
-const certLabel: Record<string, string> = { degree: '辅修学位', cert: '结业证书', none: '仅旁听' }
+const displayName = computed(() => auth.user?.nickname || auth.user?.username || '园丁同学')
+const profileSummary = computed(() => profile.value ? `${profile.value.major} · ${profile.value.grade}` : '完善画像后解锁更多成长记录')
+const interestsSummary = computed(() => profile.value?.interests?.slice(0, 3).join(' · ') || '尚未填写兴趣方向')
 
-onMounted(async () => {
-  try {
-    profile.value = await fetchProfile()
-  } catch {
-    profile.value = null
-  } finally {
-    loading.value = false
-  }
-})
+// 学习进度接口尚未接入，先保留 Figma 中的前端展示占位。
+const harvestedCredits = 28
+const totalCredits = 50
+const completionPercent = Math.round((harvestedCredits / totalCredits) * 100)
 
 async function handleLogout() {
   try { await logout() } catch { /* token 已失效也照常退出 */ }
@@ -27,126 +26,106 @@ async function handleLogout() {
   router.push('/login')
 }
 
-const menu = [
-  { label: '我的学习进度', to: '/settings/learning-progress', icon: '👀', desc: '谁可以逛我的花园' },
-  { label: '修改密码', to: '/settings/change-password', icon: '🔐', desc: '换一把花园钥匙' },
-  { label: '通知设置', to: '/settings/notification', icon: '🌸', desc: '风铃要响几声？' },
-  { label: '数据同步', to: '/settings/data-sync', icon: '☁️', desc: '种子备份云' },
-  { label: '设置', to: '/settings', icon: '⚙️', desc: '花园工具箱' },
-]
+onMounted(async () => {
+  try {
+    profile.value = await fetchProfile()
+    favoriteCount.value = getFavoriteJobIds().length
+  } catch {
+    profile.value = null
+  } finally {
+    loading.value = false
+  }
+})
+
 </script>
 
 <template>
   <div class="profile">
-    <section class="user-card">
+    <header class="profile-hero">
+      <div class="hero-top">
+        <BackButton fallback="/" />
+      </div>
       <img class="avatar" src="/illustrations/avatar-wreath.png" alt="头像" />
-      <div class="user-info">
-        <h2>{{ auth.user?.nickname || auth.user?.username }} <span class="star">⭐</span></h2>
-        <p class="account">@{{ auth.user?.username }}</p>
-        <template v-if="loading">
-          <p class="account">加载中…</p>
-        </template>
-        <template v-else-if="profile">
-          <p>{{ profile.major }} · {{ profile.grade }} · {{ profile.campus }}</p>
-        </template>
-        <router-link v-else to="/edit-profile" class="empty-cta">完善园丁卡片，解锁推荐 →</router-link>
+      <h1>{{ displayName }} <span class="star">⭐</span></h1>
+      <p class="major">{{ profileSummary }}</p>
+      <p class="streak">你已经浇灌了 120 天的复合学习 🌻</p>
+    </header>
+
+    <section class="garden-card">
+      <div class="section-title"><span>🍀</span><h2>我的花园</h2></div>
+
+      <router-link to="/edit-profile" class="garden-row">
+        <span class="row-icon">🌳</span>
+        <span class="row-main">
+          <span class="row-label">当前辅修专业</span>
+          <strong>{{ profile?.major || '还没有选择专业' }}</strong>
+          <span class="row-detail">{{ interestsSummary }}</span>
+        </span>
+        <span class="chevron">›</span>
+      </router-link>
+
+      <div class="garden-row progress-row">
+        <span class="row-icon">🍒</span>
+        <span class="row-main">
+          <span class="row-label">已修学分进度</span>
+          <strong>已收获 {{ harvestedCredits }}/{{ totalCredits }} 颗果实</strong>
+        </span>
+        <strong class="percent">{{ completionPercent }}%</strong>
+        <span class="progress-track"><span :style="{ width: `${completionPercent}%` }" /></span>
       </div>
-      <router-link to="/edit-profile" class="edit-btn" aria-label="编辑个人资料">
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>
-        </svg>
+
+      <router-link to="/career" class="garden-row">
+        <span class="row-icon">🛡️</span>
+        <span class="row-main">
+          <span class="row-label">收藏的岗位</span>
+          <strong>{{ favoriteCount }} 个收藏岗位</strong>
+        </span>
+        <span class="chevron">›</span>
       </router-link>
     </section>
 
-    <section v-if="profile" class="garden">
-      <div class="garden-title">我的画像 🌳</div>
-      <div class="garden-grid">
-        <div class="garden-item">
-          <span class="k">兴趣方向</span>
-          <span class="v">{{ profile.interests.length ? profile.interests.join('、') : '未填写' }}</span>
-        </div>
-        <div class="garden-item">
-          <span class="k">擅长技能</span>
-          <span class="v">{{ profile.strengths.length ? profile.strengths.join('、') : '未填写' }}</span>
-        </div>
-        <div class="garden-item">
-          <span class="k">职业目标</span>
-          <span class="v">{{ profile.career_goals || '未填写' }}</span>
-        </div>
-        <div class="garden-item">
-          <span class="k">证书目标</span>
-          <span class="v">{{ certLabel[profile.certificate_goal] || '未填写' }}</span>
-        </div>
-      </div>
-    </section>
+    <router-link to="/settings" class="settings-entry">
+      <span class="entry-emoji">🛠️</span>
+      <strong>设置</strong>
+      <span class="chevron">›</span>
+    </router-link>
 
-    <section class="menu">
-      <router-link v-for="m in menu" :key="m.to" :to="m.to" class="entry">
-        <span class="entry-emoji">{{ m.icon }}</span>
-        <span class="entry-main">
-          <span class="entry-label">{{ m.label }}</span>
-          <span class="entry-desc">{{ m.desc }}</span>
-        </span>
-        <svg class="chevron" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="m9 18 6-6-6-6"/>
-        </svg>
-      </router-link>
-      <button class="entry entry-logout" @click="handleLogout">
-        <span class="entry-emoji">🍂</span>
-        <span class="entry-main">
-          <span class="entry-label">退出花园</span>
-        </span>
-      </button>
-    </section>
+    <button class="logout-btn" @click="handleLogout">🍂 退出花园</button>
   </div>
 </template>
 
 <style scoped>
-.profile { padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-5); }
-
-.user-card {
-  display: flex; align-items: center; gap: var(--space-4);
-  background: var(--bg-surface); border: 1px solid var(--border);
-  border-radius: var(--radius-lg); padding: var(--space-5) var(--space-4);
-}
-.avatar {
-  width: 72px; height: 72px; border-radius: var(--radius-full);
-  object-fit: cover; flex-shrink: 0;
-}
-.user-info { flex: 1; }
-.user-info .account { margin: 0; font-size: var(--text-xs); color: var(--text-muted); }
-.user-info h2 { font-size: var(--text-xl); font-weight: var(--weight-bold); color: var(--text-primary); }
-.star { font-size: var(--text-base); }
-.user-info p { margin-top: var(--space-1); font-size: var(--text-sm); color: var(--text-muted); }
-.empty-cta { display: inline-block; margin-top: var(--space-1); font-size: var(--text-sm); color: var(--brand-strong); font-weight: var(--weight-medium); text-decoration: none; }
-.edit-btn {
-  width: 36px; height: 36px; border-radius: var(--radius-full);
-  background: var(--bg-green-faint); color: var(--brand-strong);
-  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
-  text-decoration: none;
-}
-
-.garden { background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: var(--space-4); }
-.garden-title { font-size: var(--text-base); font-weight: var(--weight-semibold); color: var(--text-primary); margin-bottom: var(--space-3); }
-.garden-grid { display: flex; flex-direction: column; gap: var(--space-4); }
-.garden-item { display: flex; flex-direction: column; gap: 4px; }
-.garden-item .k { font-size: var(--text-xs); color: var(--text-muted); }
-.garden-item .v { font-size: var(--text-sm); color: var(--text-primary); font-weight: var(--weight-medium); line-height: 1.5; }
-
-.menu { background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; }
-.entry {
-  display: flex; align-items: center; gap: var(--space-3);
-  width: 100%; padding: var(--space-4);
-  text-decoration: none; color: var(--text-primary);
-  border: none; border-bottom: 1px solid var(--bg-subtle);
-  background: none; font-family: inherit; font-size: var(--text-base);
-  cursor: pointer; text-align: left;
-}
-.entry:last-child { border-bottom: none; }
+.profile { padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-4); }
+.profile-hero { display: flex; flex-direction: column; align-items: center; text-align: center; }
+.hero-top { align-self: stretch; display: flex; align-items: center; margin-bottom: var(--space-2); }
+.avatar { width: 92px; height: 92px; border-radius: var(--radius-full); object-fit: cover; border: 3px solid var(--bg-green-soft); }
+.profile-hero h1 { margin-top: var(--space-3); font-size: var(--text-xl); font-weight: var(--weight-bold); color: var(--text-primary); }
+.star { font-size: var(--text-lg); }
+.major { margin-top: var(--space-1); font-size: var(--text-sm); color: var(--accent-purple); font-weight: var(--weight-semibold); }
+.streak { margin-top: var(--space-2); padding: 4px var(--space-3); border: 1px solid var(--bg-green-soft); border-radius: var(--radius-full); color: var(--brand-strong); font-size: var(--text-xs); background: var(--bg-green-faint); }
+.garden-card, .tools-card, .settings-entry { background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-lg); }
+.garden-card { padding: var(--space-4); }
+.section-title { display: grid; grid-template-columns: 30px minmax(0, 1fr); column-gap: var(--space-3); align-items: center; color: var(--accent-purple); }
+.section-title span { width: 30px; font-size: var(--text-xl); text-align: center; }
+.section-title h2 { font-size: var(--text-base); font-weight: var(--weight-semibold); }
+.garden-row { display: flex; align-items: center; gap: var(--space-3); min-width: 0; padding: var(--space-4) 0; border-bottom: 1px solid var(--bg-subtle); color: var(--text-primary); text-decoration: none; }
+.garden-row:last-child { border-bottom: none; padding-bottom: 0; }
+.row-icon { width: 30px; flex-shrink: 0; font-size: var(--text-xl); text-align: center; }
+.row-main { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 3px; }
+.row-label { color: var(--text-muted); font-size: var(--text-xs); }
+.row-main strong { color: var(--text-primary); font-size: var(--text-base); font-weight: var(--weight-semibold); }
+.row-detail { color: var(--text-muted); font-size: var(--text-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chevron { flex-shrink: 0; color: var(--brand); font-size: 28px; line-height: 1; }
+.progress-row { display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; column-gap: var(--space-3); align-items: start; }
+.progress-row .row-icon { grid-column: 1; grid-row: 1; align-self: center; }
+.progress-row .row-main { grid-column: 2; grid-row: 1; }
+.progress-row .percent { grid-column: 3; grid-row: 1; }
+.progress-row .percent { align-self: end; margin-bottom: 1px; }
+.progress-track { grid-column: 1 / 4; grid-row: 2; display: block; width: 100%; height: 10px; margin-top: var(--space-2); overflow: hidden; border-radius: var(--radius-full); background: var(--bg-green-faint); border: 1px solid var(--bg-green-soft); }
+.progress-track span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--brand), var(--brand-strong)); }
+.percent { flex-shrink: 0; color: var(--brand-strong) !important; font-size: var(--text-base) !important; }
+.settings-entry { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-4); color: var(--text-primary); text-decoration: none; }
+.settings-entry strong { flex: 1; font-size: var(--text-base); }
 .entry-emoji { font-size: var(--text-lg); flex-shrink: 0; line-height: 1; }
-.entry-main { flex: 1; display: flex; flex-direction: column; gap: 2px; }
-.entry-label { font-size: var(--text-base); font-weight: var(--weight-medium); }
-.entry-desc { font-size: var(--text-xs); color: var(--text-muted); }
-.chevron { color: var(--text-muted); flex-shrink: 0; }
-.entry-logout { color: var(--accent-purple); }
+.logout-btn { align-self: center; padding: var(--space-2) var(--space-6); border: 1px solid var(--accent-purple); border-radius: var(--radius-full); background: var(--bg-surface); color: var(--accent-purple); font-family: inherit; font-size: var(--text-sm); cursor: pointer; }
 </style>

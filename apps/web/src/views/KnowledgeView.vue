@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { searchKnowledge, type SearchResult } from '../api/client'
+import { authHeaders, searchKnowledge, type SearchResult } from '../api/client'
+import BackButton from '../components/BackButton.vue'
 
 interface Document {
   id: string; title: string; trust_level: string; source_type: string
@@ -19,57 +20,97 @@ const uploadContent = ref('')
 const uploadLevel = ref('A')
 const uploadType = ref('policy')
 const uploadMode = ref<'text' | 'file'>('text')
+const uploadFile = ref<File | null>(null)
 const uploadMsg = ref('')
+const uploadError = ref('')
 
 // version
 const versionInput = ref('')
 
 async function loadDocs() {
   loading.value = true
-  const params = new URLSearchParams()
-  if (filterActive.value !== null) params.set('is_active', String(filterActive.value))
-  if (filterLevel.value) params.set('trust_level', filterLevel.value)
-  const res = await fetch(`/api/v1/knowledge/documents?${params}`)
-  docs.value = await res.json()
-  loading.value = false
+  try {
+    const params = new URLSearchParams()
+    if (filterActive.value !== null) params.set('is_active', String(filterActive.value))
+    if (filterLevel.value) params.set('trust_level', filterLevel.value)
+    const res = await fetch(`/api/v1/knowledge/documents?${params}`, { headers: authHeaders() })
+    const data = await res.json().catch(() => [])
+    if (!res.ok) throw new Error(data.detail || '文档列表加载失败')
+    docs.value = data
+  } catch (e) {
+    uploadError.value = e instanceof Error ? e.message : '文档列表加载失败'
+  } finally {
+    loading.value = false
+  }
+}
+
+function onFileSelected(event: Event) {
+  uploadFile.value = (event.target as HTMLInputElement).files?.[0] ?? null
 }
 
 async function handleUpload() {
-  if (!uploadTitle.value.trim() || !uploadContent.value.trim()) return
+  uploadMsg.value = ''
+  uploadError.value = ''
+  if (!uploadTitle.value.trim()) {
+    uploadError.value = '请填写文档标题'
+    return
+  }
+  if (uploadMode.value === 'text' && !uploadContent.value.trim()) {
+    uploadError.value = '请填写文档内容'
+    return
+  }
+  if (uploadMode.value === 'file' && !uploadFile.value) {
+    uploadError.value = '请选择要上传的文件'
+    return
+  }
   const form = new FormData()
   form.append('title', uploadTitle.value)
-  form.append('content', uploadContent.value)
   form.append('trust_level', uploadLevel.value)
   form.append('source_type', uploadType.value)
 
   const ep = uploadMode.value === 'text' ? '/api/v1/knowledge/documents/text' : '/api/v1/knowledge/documents'
   if (uploadMode.value === 'file') {
-    uploadMsg.value = '请使用文本模式上传'
-    return
+    form.append('file', uploadFile.value as File)
+  } else {
+    form.append('content', uploadContent.value)
   }
 
-  const res = await fetch(ep, { method: 'POST', body: form })
-  const data = await res.json()
-  if (data.error) {
-    uploadMsg.value = `错误: ${data.error}`
-  } else {
+  try {
+    const res = await fetch(ep, { method: 'POST', headers: authHeaders(), body: form })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(data.detail || '上传失败')
+    if (data.error) throw new Error(data.error)
     uploadMsg.value = `上传成功: ${data.title}`
-    uploadTitle.value = ''; uploadContent.value = ''
-    loadDocs()
+    uploadTitle.value = ''
+    uploadContent.value = ''
+    uploadFile.value = null
+    await loadDocs()
+  } catch (e) {
+    uploadError.value = e instanceof Error ? e.message : '上传失败，请稍后重试'
   }
 }
 
 async function activateVersion() {
   if (!versionInput.value.trim()) return
-  const res = await fetch(`/api/v1/knowledge/versions/${versionInput.value}/activate`, { method: 'POST' })
-  const data = await res.json()
-  uploadMsg.value = `已激活版本 ${data.activated_version}，${data.document_count} 篇文档`
-  loadDocs()
+  try {
+    const res = await fetch(`/api/v1/knowledge/versions/${versionInput.value}/activate`, { method: 'POST', headers: authHeaders() })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(data.detail || '版本激活失败')
+    uploadMsg.value = `已激活版本 ${data.activated_version}，${data.document_count} 篇文档`
+    await loadDocs()
+  } catch (e) {
+    uploadError.value = e instanceof Error ? e.message : '版本激活失败'
+  }
 }
 
 async function deactivateDoc(id: string) {
-  await fetch(`/api/v1/knowledge/documents/${id}`, { method: 'DELETE' })
-  loadDocs()
+  try {
+    const res = await fetch(`/api/v1/knowledge/documents/${id}`, { method: 'DELETE', headers: authHeaders() })
+    if (!res.ok) throw new Error('文档停用失败')
+    await loadDocs()
+  } catch (e) {
+    uploadError.value = e instanceof Error ? e.message : '文档停用失败'
+  }
 }
 
 function toggleFilter(val: boolean | null) {
@@ -131,10 +172,15 @@ onMounted(loadDocs)
         <input v-model="versionInput" placeholder="输入版本号 (v1/v2)" />
         <button @click="activateVersion">激活版本</button>
         <p v-if="uploadMsg" class="msg">{{ uploadMsg }}</p>
+        <p v-if="uploadError" class="error">{{ uploadError }}</p>
       </div>
     </div>
 
     <div class="kb-main">
+      <div class="kb-title">
+        <BackButton fallback="/" />
+        <h2>知识森林</h2>
+      </div>
       <!-- 检索 -->
       <h3>知识检索</h3>
       <div class="search-box">
@@ -177,7 +223,13 @@ onMounted(loadDocs)
       <h3 style="margin-top: 24px">上传文档</h3>
       <div class="upload-form">
         <input v-model="uploadTitle" placeholder="文档标题" />
-        <textarea v-model="uploadContent" placeholder="文档内容（纯文本）" rows="6" />
+        <div class="upload-mode">
+          <button :class="{ active: uploadMode === 'text' }" @click="uploadMode = 'text'">文本</button>
+          <button :class="{ active: uploadMode === 'file' }" @click="uploadMode = 'file'">文件 / PDF</button>
+        </div>
+        <textarea v-if="uploadMode === 'text'" v-model="uploadContent" placeholder="文档内容（纯文本）" rows="6" />
+        <label v-else class="file-picker">选择文本或 PDF 文件<input type="file" accept=".txt,.md,.pdf,text/plain,text/markdown,application/pdf" @change="onFileSelected" /></label>
+        <p v-if="uploadFile" class="msg">已选择：{{ uploadFile.name }}</p>
         <div class="upload-row">
           <select v-model="uploadLevel">
             <option value="S">S 级</option>
@@ -195,6 +247,7 @@ onMounted(loadDocs)
           <button @click="handleUpload">上传</button>
         </div>
         <p v-if="uploadMsg" class="msg">{{ uploadMsg }}</p>
+        <p v-if="uploadError" class="error">{{ uploadError }}</p>
       </div>
     </div>
   </div>
@@ -215,7 +268,7 @@ onMounted(loadDocs)
   flex: 1; padding: 4px 8px; font-size: 0.78rem; border: 1px solid #d4d4d8;
   background: #fff; border-radius: 4px; cursor: pointer;
 }
-.filter-btns button.active { background: #5a7a6b; color: #fff; border-color: #5a7a6b; }
+.filter-btns button.active { background: var(--bg-green-soft); color: var(--brand-strong); border-color: var(--brand); }
 select { padding: 6px 8px; border: 1px solid #d4d4d8; border-radius: 6px; font-size: 0.85rem; width: 100%; }
 
 .version-section { border-top: 1px solid #e5e7eb; padding-top: 12px; }
@@ -229,6 +282,8 @@ select { padding: 6px 8px; border: 1px solid #d4d4d8; border-radius: 6px; font-s
 }
 
 .kb-main { flex: 1; padding: 20px; overflow-y: auto; }
+.kb-title { display: flex; align-items: center; gap: var(--space-3); margin-bottom: 20px; }
+.kb-title h2 { font-size: var(--text-xl); color: var(--text-primary); }
 .kb-main h3 { margin-bottom: 12px; }
 
 table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
@@ -262,7 +317,14 @@ th { color: #6b7280; font-weight: 500; font-size: 0.8rem; }
   border-radius: 8px; cursor: pointer;
 }
 .msg { font-size: 0.85rem; color: #6b7280; }
+.error { font-size: 0.85rem; color: #b91c1c; }
 .loading { padding: 20px; color: #9ca3af; }
+
+.upload-mode { display: flex; gap: 6px; }
+.upload-mode button { padding: 6px 14px; border: 1px solid #d4d4d8; background: #fff; border-radius: 6px; cursor: pointer; }
+.upload-mode button.active { background: var(--bg-green-soft); border-color: var(--brand); color: var(--brand-strong); }
+.file-picker { padding: 18px; border: 1px dashed #a1a1aa; border-radius: 8px; color: #6b7280; cursor: pointer; }
+.file-picker input { display: block; margin-top: 8px; }
 
 .search-box { display: flex; gap: 8px; margin-bottom: 8px; max-width: 600px; }
 .search-box input {

@@ -57,6 +57,60 @@ SAMPLE_JOBS = [
 ]
 
 
+CAREER_KEYWORDS = {
+    "记者/编辑": ("记者", "编辑"),
+    "内容策划/新媒体运营": ("内容", "运营", "策划"),
+    "数据新闻记者": ("数据", "记者"),
+    "企业传播/公关": ("公关", "传播"),
+}
+
+
+def build_career_outcomes(pathways: list[dict], jobs: list[dict]) -> list[dict]:
+    """把技能路径和岗位表汇总为可解释的职业出口画像。"""
+    outcomes = []
+    for career in sorted({
+        name for pathway in pathways for name in pathway.get("careers", [])
+    }):
+        related_pathways = [
+            pathway for pathway in pathways if career in pathway.get("careers", [])
+        ]
+        skills = sorted({
+            pathway.get("skill_name", "")
+            for pathway in related_pathways
+            if pathway.get("skill_name")
+        })
+        knowledge_points = sorted({
+            point for pathway in related_pathways
+            for point in pathway.get("knowledge_points", [])
+        })
+        keywords = CAREER_KEYWORDS.get(career, ())
+        related_jobs = [
+            job for job in jobs
+            if any(
+                skill in (job.get("skills_required", []) + job.get("skills_preferred", []))
+                for skill in skills
+            ) or any(keyword in job.get("title", "") for keyword in keywords)
+        ]
+        required_skill_count = len({
+            skill for job in related_jobs for skill in job.get("skills_required", [])
+        })
+        difficulty = "基础"
+        if required_skill_count >= 4 or len(skills) >= 3:
+            difficulty = "进阶"
+        elif required_skill_count >= 2 or len(skills) >= 2:
+            difficulty = "中阶"
+        outcomes.append({
+            "career": career,
+            "related_job_count": len(related_jobs),
+            "job_titles": sorted({job.get("title", "") for job in related_jobs if job.get("title")}),
+            "skills": skills,
+            "knowledge_points": knowledge_points,
+            "difficulty": difficulty,
+            "evidence": "岗位表与知识图谱技能映射",
+        })
+    return outcomes
+
+
 def match_jobs(major: str, minor: str | None = None, jobs: list[dict] | None = None) -> list[dict]:
     """按主修+辅修专业匹配岗位，计算技能覆盖度。"""
     jobs = jobs or SAMPLE_JOBS
