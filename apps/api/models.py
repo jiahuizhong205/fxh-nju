@@ -102,6 +102,23 @@ class UserAccountLink(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
+class UserFriendship(Base):
+    """用户好友请求与关系状态；一条记录表示一个请求方向。"""
+
+    __tablename__ = "user_friendships"
+    __table_args__ = (
+        UniqueConstraint("requester_id", "addressee_id", name="uq_user_friendships_pair"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    requester_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    addressee_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    status: Mapped[str] = mapped_column(String(20), default="pending")  # pending/accepted
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    accepted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
 class SyncRecord(Base):
     """账号级数据同步检查点。"""
 

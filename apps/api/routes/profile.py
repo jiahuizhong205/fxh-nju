@@ -247,14 +247,14 @@ def _serialize(p: StudentProfile) -> dict:
     }
 
 
-def _can_view_profile(scope: str, *, is_self: bool, same_major: bool) -> bool:
-    """统一执行可见范围；好友关系尚未建立时不把普通用户误判为好友。"""
+def _can_view_profile(scope: str, *, is_self: bool, same_major: bool, is_friend: bool = False) -> bool:
+    """统一执行可见范围；好友范围必须由服务端已接受的关系确认。"""
     if is_self:
         return True
     return {
         "全校公开": True,
         "同专业同学": same_major,
-        "仅好友": False,
+        "仅好友": is_friend,
         "仅自己": False,
     }.get(scope, False)
 
@@ -304,10 +304,13 @@ async def public_profile_summary(
     )
     viewer_profile = viewer_result.scalar_one_or_none()
     visibility = VisibilityPreferences.model_validate((target_user.preferences or {}).get("visibility", {}))
+    from apps.api.routes.friends import are_friends
+
     if not _can_view_profile(
         visibility.scope,
         is_self=user.id == user_id,
         same_major=bool(viewer_profile and viewer_profile.major == target_profile.major),
+        is_friend=await are_friends(db, user.id, user_id),
     ):
         raise HTTPException(status_code=403, detail="该用户未向你开放此画像范围")
 
