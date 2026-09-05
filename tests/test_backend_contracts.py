@@ -111,10 +111,15 @@ class BackendContractTests(unittest.TestCase):
 
     def test_runtime_init_migrates_recommendation_report_stale_flag(self):
         database = Path(__file__).parents[1] / "apps" / "api" / "database.py"
-        content = database.read_text(encoding="utf-8")
-        self.assertIn("ALTER TABLE recommendation_reports ADD COLUMN IF NOT EXISTS", content)
+        migration = Path(__file__).parents[1] / "infra" / "migrations" / "010_recommendation_stale.sql"
+        content = migration.read_text(encoding="utf-8")
+        database_source = database.read_text(encoding="utf-8")
+        self.assertIn("apply_migrations(conn)", database_source)
+        self.assertIn("ALTER TABLE recommendation_reports", content)
+        self.assertIn("ADD COLUMN IF NOT EXISTS is_stale", content)
         self.assertIn("is_stale BOOLEAN NOT NULL DEFAULT FALSE", content)
-        self.assertIn("ALTER TABLE courses ADD COLUMN IF NOT EXISTS schedule", content)
+        course_migration = Path(__file__).parents[1] / "infra" / "migrations" / "018_course_schedules.sql"
+        self.assertIn("ALTER TABLE courses ADD COLUMN IF NOT EXISTS schedule", course_migration.read_text(encoding="utf-8"))
 
     def test_password_policy_accepts_eight_to_twenty_alphanumeric_password(self):
         for password in ("Abcdef12", "NJU2026ok", "A1" + "x" * 18):
