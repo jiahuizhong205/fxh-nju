@@ -223,6 +223,13 @@ class Job(Base):
     skills_preferred: Mapped[list] = mapped_column(JSON, default=list)
     deadline: Mapped[str] = mapped_column(String(20))
     source: Mapped[str] = mapped_column(String(100))
+    remote_type: Mapped[str] = mapped_column(String(50), default="")
+    job_type: Mapped[str] = mapped_column(String(50), default="")
+    arrival_time: Mapped[str] = mapped_column(String(100), default="")
+    internship_duration: Mapped[str] = mapped_column(String(100), default="")
+    responsibilities: Mapped[list] = mapped_column(JSON, default=list)
+    application_email: Mapped[str] = mapped_column(String(200), default="")
+    application_note: Mapped[str] = mapped_column(Text, default="")
 
 
 class JobFavorite(Base):

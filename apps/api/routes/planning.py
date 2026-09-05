@@ -136,6 +136,13 @@ def _job_dict(j) -> dict:
         "majors": j.majors or [], "preferred_cross": j.preferred_cross or [],
         "skills_required": j.skills_required or [], "skills_preferred": j.skills_preferred or [],
         "deadline": j.deadline, "source": j.source,
+        "remote_type": j.remote_type,
+        "job_type": j.job_type,
+        "arrival_time": j.arrival_time,
+        "internship_duration": j.internship_duration,
+        "responsibilities": j.responsibilities or [],
+        "application_email": j.application_email,
+        "application_note": j.application_note,
     }
 
 

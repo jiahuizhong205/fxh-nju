@@ -239,6 +239,27 @@ class BackendContractTests(unittest.TestCase):
         self.assertEqual(len(db.added), 1)
         self.assertEqual(db.commit_count, 1)
 
+    def test_job_detail_serializes_design_fields(self):
+        job = Job(
+            id="job-detail",
+            employer="测试单位",
+            title="内容实习生",
+            location="南京",
+            deadline="2026-12-31",
+            source="test",
+            remote_type="混合办公",
+            job_type="实习",
+            arrival_time="每周至少 3 天",
+            internship_duration="3 个月",
+            responsibilities=["内容整理", "数据分析"],
+            application_email="hr@example.com",
+            application_note="请附个人简历",
+        )
+        serialized = planning._job_dict(job)
+        self.assertEqual(serialized["remote_type"], "混合办公")
+        self.assertEqual(serialized["responsibilities"], ["内容整理", "数据分析"])
+        self.assertEqual(serialized["application_email"], "hr@example.com")
+
     def test_job_favorite_list_and_delete(self):
         user = User(username="favorite-user-2", password_hash="hash", salt="salt")
         first = JobFavorite(user_id=user.id, job_id="job-1")

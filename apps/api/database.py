@@ -45,3 +45,24 @@ async def init_db():
                 "ALTER TABLE recommendation_reports ADD COLUMN IF NOT EXISTS "
                 "is_stale BOOLEAN NOT NULL DEFAULT FALSE"
             ))
+            await conn.execute(text(
+                "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS remote_type VARCHAR(50) NOT NULL DEFAULT ''"
+            ))
+            await conn.execute(text(
+                "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS job_type VARCHAR(50) NOT NULL DEFAULT ''"
+            ))
+            await conn.execute(text(
+                "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS arrival_time VARCHAR(100) NOT NULL DEFAULT ''"
+            ))
+            await conn.execute(text(
+                "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS internship_duration VARCHAR(100) NOT NULL DEFAULT ''"
+            ))
+            await conn.execute(text(
+                "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS responsibilities JSONB NOT NULL DEFAULT '[]'::jsonb"
+            ))
+            await conn.execute(text(
+                "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS application_email VARCHAR(200) NOT NULL DEFAULT ''"
+            ))
+            await conn.execute(text(
+                "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS application_note TEXT NOT NULL DEFAULT ''"
+            ))
