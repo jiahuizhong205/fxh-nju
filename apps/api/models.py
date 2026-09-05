@@ -204,6 +204,7 @@ class LearningPlan(Base):
     alternatives: Mapped[list] = mapped_column(JSON, default=list)
     warnings: Mapped[list] = mapped_column(JSON, default=list)
     infeasible: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    schedule_analysis: Mapped[dict] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 

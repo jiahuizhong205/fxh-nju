@@ -444,6 +444,12 @@ class BackendContractTests(unittest.TestCase):
         self.assertIn("user_agent", serialized)
         self.assertNotIn("token_hash", serialized)
 
+    def test_saved_plan_can_request_schedule_preview_for_selected_classes(self):
+        payload = planning.ConflictCheckRequest(teaching_class_ids=["TC-001", "TC-002"])
+        self.assertEqual(payload.teaching_class_ids, ["TC-001", "TC-002"])
+        plan = LearningPlan(program_name="新闻学", schedule_analysis={"feasible": False})
+        self.assertFalse(planning._saved_plan_dict(plan)["schedule_analysis"]["feasible"])
+
     def test_learning_progress_summary_uses_only_completed_credits(self):
         records = [
             LearningRecord(course_name="新闻采访", term="2026春", credits=3, status="completed"),

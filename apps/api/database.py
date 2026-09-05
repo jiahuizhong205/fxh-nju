@@ -75,3 +75,7 @@ async def init_db():
             await conn.execute(text(
                 "ALTER TABLE courses ADD COLUMN IF NOT EXISTS schedule JSONB NOT NULL DEFAULT '[]'::jsonb"
             ))
+            await conn.execute(text(
+                "ALTER TABLE learning_plans ADD COLUMN IF NOT EXISTS "
+                "schedule_analysis JSONB NOT NULL DEFAULT '{}'::jsonb"
+            ))
