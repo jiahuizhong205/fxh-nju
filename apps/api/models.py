@@ -187,6 +187,18 @@ class FeedbackAttachment(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
+class FeedbackReply(Base):
+    """管理员对反馈的回复；回复正文与反馈账号严格关联。"""
+
+    __tablename__ = "feedback_replies"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    feedback_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("feedback.id", ondelete="CASCADE"))
+    admin_user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
+    content: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
 class UserAvatar(Base):
     """账号头像原图；后续可在对象存储迁移时替换 data 字段。"""
 

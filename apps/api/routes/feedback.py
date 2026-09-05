@@ -5,14 +5,15 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import Response
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import Literal
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.api.database import get_db
-from apps.api.models import Feedback, FeedbackAttachment, User, utcnow
+from apps.api.models import Feedback, FeedbackAttachment, FeedbackReply, User, utcnow
 from apps.api.routes.auth import get_current_user
+from apps.api.routes.notifications import enqueue_preference_notification
 
 router = APIRouter()
 
@@ -38,9 +39,34 @@ class FeedbackAdminUpdate(BaseModel):
     status: Literal["received", "in_progress", "resolved"]
 
 
+class FeedbackAdminReply(BaseModel):
+    content: str = Field(min_length=1, max_length=2000)
+
+    @field_validator("content")
+    @classmethod
+    def validate_content(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("回复内容不能为空")
+        return value
+
+
 def _require_admin(user: User) -> None:
     if not user.is_admin:
         raise HTTPException(status_code=403, detail="需要管理员权限")
+
+
+def _mask_feedback_contact(value: str) -> str:
+    """管理端只展示可用于人工识别的最小联系方式片段。"""
+    value = (value or "").strip()
+    if not value:
+        return ""
+    if "@" in value:
+        local, domain = value.split("@", 1)
+        return f"{local[:1]}*****@{domain}"
+    if len(value) >= 7:
+        return f"{value[:3]}****{value[-4:]}"
+    return "***"
 
 
 def _validate_attachment(content_type: str | None, content: bytes) -> None:
@@ -76,17 +102,45 @@ async def create_feedback(
     return {"id": str(feedback.id), "status": feedback.status}
 
 
-def _serialize_feedback(feedback: Feedback) -> dict:
+def _serialize_feedback(
+    feedback: Feedback,
+    *,
+    mask_contact: bool = False,
+    replies: list[FeedbackReply] | None = None,
+) -> dict:
     return {
         "id": str(feedback.id),
         "feedback_type": feedback.feedback_type,
         "content": feedback.content,
-        "contact": feedback.contact,
+        "contact": _mask_feedback_contact(feedback.contact) if mask_contact else feedback.contact,
         "attachments": feedback.attachments or [],
+        "replies": [_serialize_reply(item) for item in (replies or [])],
         "status": feedback.status,
         "created_at": feedback.created_at.isoformat() if feedback.created_at else None,
         "updated_at": feedback.updated_at.isoformat() if feedback.updated_at else None,
     }
+
+
+def _serialize_reply(reply: FeedbackReply) -> dict:
+    return {
+        "id": str(reply.id),
+        "content": reply.content,
+        "created_at": reply.created_at.isoformat() if reply.created_at else None,
+    }
+
+
+async def _load_replies(db: AsyncSession, feedback_ids: list[UUID]) -> dict[UUID, list[FeedbackReply]]:
+    if not feedback_ids:
+        return {}
+    result = await db.execute(
+        select(FeedbackReply)
+        .where(FeedbackReply.feedback_id.in_(feedback_ids))
+        .order_by(FeedbackReply.created_at)
+    )
+    grouped: dict[UUID, list[FeedbackReply]] = {}
+    for reply in result.scalars().all():
+        grouped.setdefault(reply.feedback_id, []).append(reply)
+    return grouped
 
 
 @router.get("/feedback")
@@ -99,7 +153,14 @@ async def list_feedback(
         .where(Feedback.user_id == user.id)
         .order_by(Feedback.created_at.desc())
     )
-    return {"feedback": [_serialize_feedback(item) for item in result.scalars().all()]}
+    items = result.scalars().all()
+    replies = await _load_replies(db, [item.id for item in items])
+    return {
+        "feedback": [
+            _serialize_feedback(item, replies=replies.get(item.id, []))
+            for item in items
+        ]
+    }
 
 
 @router.get("/admin/feedback")
@@ -114,7 +175,7 @@ async def admin_list_feedback(
     )
     return {
         "feedback": [
-            {**_serialize_feedback(item), "user_id": str(item.user_id)}
+            {**_serialize_feedback(item, mask_contact=True), "user_id": str(item.user_id)}
             for item in result.scalars().all()
         ]
     }
@@ -139,6 +200,41 @@ async def admin_update_feedback(
     return {"feedback": _serialize_feedback(feedback)}
 
 
+@router.post("/admin/feedback/{feedback_id}/replies")
+async def admin_reply_feedback(
+    feedback_id: UUID,
+    payload: FeedbackAdminReply,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    _require_admin(user)
+    feedback_result = await db.execute(select(Feedback).where(Feedback.id == feedback_id))
+    feedback = feedback_result.scalar_one_or_none()
+    if not feedback:
+        raise HTTPException(status_code=404, detail="反馈不存在")
+    reply = FeedbackReply(
+        feedback_id=feedback.id,
+        admin_user_id=user.id,
+        content=payload.content,
+    )
+    db.add(reply)
+    feedback.updated_at = utcnow()
+    target_result = await db.execute(select(User).where(User.id == feedback.user_id))
+    target_user = target_result.scalar_one_or_none()
+    if target_user:
+        await enqueue_preference_notification(
+            db,
+            target_user,
+            "意见反馈回复",
+            "feedback_reply",
+            "你的反馈有新回复",
+            payload.content,
+        )
+    await db.commit()
+    await db.refresh(reply)
+    return {"reply": _serialize_reply(reply)}
+
+
 @router.get("/feedback/{feedback_id}")
 async def get_feedback(
     feedback_id: UUID,
@@ -151,7 +247,8 @@ async def get_feedback(
     feedback = result.scalar_one_or_none()
     if not feedback:
         raise HTTPException(status_code=404, detail="反馈不存在")
-    return {"feedback": _serialize_feedback(feedback)}
+    replies = await _load_replies(db, [feedback.id])
+    return {"feedback": _serialize_feedback(feedback, replies=replies.get(feedback.id, []))}
 
 
 @router.post("/feedback/{feedback_id}/attachments")

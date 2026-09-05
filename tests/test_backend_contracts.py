@@ -15,7 +15,7 @@ from fastapi import HTTPException
 from pydantic import ValidationError
 
 from apps.api import config
-from apps.api.models import CacheInvalidation, Feedback, FeedbackAttachment, Job, JobApplication, JobFavorite, KnowledgeProgress, LearningActivity, LearningPlan, LearningRecord, Notification, PasswordHistory, PlanExport, ProgramEnrollment, RecommendationReport, SyncRecord, User, UserAccountLink, UserAvatar, UserContact, UserSession, VerificationChallenge, utcnow
+from apps.api.models import CacheInvalidation, Feedback, FeedbackAttachment, FeedbackReply, Job, JobApplication, JobFavorite, KnowledgeProgress, LearningActivity, LearningPlan, LearningRecord, Notification, PasswordHistory, PlanExport, ProgramEnrollment, RecommendationReport, SyncRecord, User, UserAccountLink, UserAvatar, UserContact, UserSession, VerificationChallenge, utcnow
 from apps.api.routes import account
 from apps.api.routes import auth
 from apps.api.routes import knowledge
@@ -497,6 +497,22 @@ class BackendContractTests(unittest.TestCase):
 
         admin = User(is_admin=True)
         self.assertIsNone(feedback._require_admin(admin))
+
+    def test_feedback_admin_contact_is_masked_and_reply_contract_is_persistable(self):
+        self.assertEqual(feedback._mask_feedback_contact("13800138000"), "138****8000")
+        self.assertEqual(feedback._mask_feedback_contact("student@nju.edu.cn"), "s*****@nju.edu.cn")
+        reply = FeedbackReply(
+            feedback_id="00000000-0000-0000-0000-000000000001",
+            admin_user_id="00000000-0000-0000-0000-000000000002",
+            content="感谢反馈，我们已经记录并处理。",
+        )
+        self.assertEqual(reply.content, "感谢反馈，我们已经记录并处理。")
+
+    def test_feedback_admin_reply_validates_non_empty_content(self):
+        payload = feedback.FeedbackAdminReply(content="已处理")
+        self.assertEqual(payload.content, "已处理")
+        with self.assertRaises(ValidationError):
+            feedback.FeedbackAdminReply(content=" ")
 
     def test_unverified_contact_cannot_become_primary(self):
         contact = UserContact(contact_type="phone", value="13800138000", verified=False, is_primary=False)
