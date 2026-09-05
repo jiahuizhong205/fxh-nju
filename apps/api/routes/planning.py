@@ -6,14 +6,14 @@
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
-from sqlalchemy import select
+from pydantic import BaseModel, Field
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.api.database import get_db
 from apps.api.models import (
     StudentProfile, Program, ProgramPlanItem, Course, Job, JobFavorite,
-    RecommendationReport, User,
+    RecommendationReport, LearningPlan, User, utcnow,
 )
 from apps.api.routes.auth import get_current_user
 from services.planning.recommendation_engine import recommend
@@ -25,6 +25,24 @@ router = APIRouter()
 
 class RecommendRequest(BaseModel):
     profile: dict | None = None  # 缺省时读取最新画像
+
+
+class SavePlanRequest(BaseModel):
+    program: str
+    adopt: bool = False
+
+
+class PlanItemInput(BaseModel):
+    semester: int = Field(ge=1, le=20)
+    term: str = Field(min_length=1, max_length=20)
+    year: int = Field(ge=1, le=10)
+    course: str = Field(min_length=1, max_length=200)
+    credits: float = Field(gt=0, le=20)
+    campus: str = Field(default="", max_length=50)
+
+
+class PlanUpdateRequest(BaseModel):
+    items: list[PlanItemInput] = Field(min_length=1, max_length=100)
 
 
 async def _latest_profile(db: AsyncSession, user_id) -> dict | None:
@@ -46,6 +64,7 @@ async def _latest_profile(db: AsyncSession, user_id) -> dict | None:
         "credit_budget": p.credit_budget,
         "certificate_goal": p.certificate_goal,
         "schedule_preferences": p.schedule_preferences or {},
+        "version": p.version,
     }
 
 
@@ -195,6 +214,133 @@ async def course_plan(
         "warnings": result.warnings,
         "infeasible": result.infeasible,
     }
+
+
+def _saved_plan_dict(plan: LearningPlan) -> dict:
+    return {
+        "id": str(plan.id),
+        "program": plan.program_name,
+        "profile_version": plan.profile_version,
+        "status": plan.status,
+        "items": plan.items or [],
+        "alternatives": plan.alternatives or [],
+        "warnings": plan.warnings or [],
+        "infeasible": plan.infeasible,
+        "created_at": plan.created_at.isoformat() if plan.created_at else None,
+        "updated_at": plan.updated_at.isoformat() if plan.updated_at else None,
+    }
+
+
+@router.post("/programs/plan")
+async def save_course_plan(
+    payload: SavePlanRequest,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    profile = await _latest_profile(db, user.id) or {}
+    db_plans = await _load_plans(db)
+    plans = {**PROGRAM_PLANS, **db_plans}
+    result = generate_plan(payload.program, profile, plans)
+    if not result.items:
+        raise HTTPException(status_code=404, detail=f"未找到「{payload.program}」的培养方案")
+
+    if payload.adopt:
+        await db.execute(
+            update(LearningPlan)
+            .where(LearningPlan.user_id == user.id, LearningPlan.status == "adopted")
+            .values(status="archived", updated_at=utcnow())
+        )
+    plan = LearningPlan(
+        user_id=user.id,
+        program_name=result.program_name,
+        profile_version=profile.get("version", 0),
+        status="adopted" if payload.adopt else "draft",
+        items=[_plan_item(item) for item in result.items],
+        alternatives=[[_plan_item(item) for item in alt] for alt in result.alternatives],
+        warnings=result.warnings,
+        infeasible=result.infeasible,
+    )
+    db.add(plan)
+    await db.commit()
+    await db.refresh(plan)
+    return {"plan": _saved_plan_dict(plan)}
+
+
+@router.get("/programs/plans")
+async def list_saved_plans(
+    include_archived: bool = False,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    query = select(LearningPlan).where(LearningPlan.user_id == user.id)
+    if not include_archived:
+        query = query.where(LearningPlan.status != "archived")
+    result = await db.execute(query.order_by(LearningPlan.updated_at.desc()).limit(20))
+    return {"plans": [_saved_plan_dict(plan) for plan in result.scalars().all()]}
+
+
+@router.get("/programs/plans/{plan_id}")
+async def get_saved_plan(
+    plan_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(LearningPlan).where(LearningPlan.id == plan_id, LearningPlan.user_id == user.id)
+    )
+    plan = result.scalar_one_or_none()
+    if not plan:
+        raise HTTPException(status_code=404, detail="课程规划不存在")
+    return {"plan": _saved_plan_dict(plan)}
+
+
+@router.patch("/programs/plans/{plan_id}")
+async def update_saved_plan(
+    plan_id: uuid.UUID,
+    payload: PlanUpdateRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(LearningPlan).where(LearningPlan.id == plan_id, LearningPlan.user_id == user.id)
+    )
+    plan = result.scalar_one_or_none()
+    if not plan:
+        raise HTTPException(status_code=404, detail="课程规划不存在")
+    plan.items = [item.model_dump() for item in payload.items]
+    plan.status = "draft" if plan.status == "adopted" else plan.status
+    plan.updated_at = utcnow()
+    await db.commit()
+    await db.refresh(plan)
+    return {"plan": _saved_plan_dict(plan)}
+
+
+@router.put("/programs/plans/{plan_id}/adopt")
+async def adopt_saved_plan(
+    plan_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(LearningPlan).where(LearningPlan.id == plan_id, LearningPlan.user_id == user.id)
+    )
+    plan = result.scalar_one_or_none()
+    if not plan:
+        raise HTTPException(status_code=404, detail="课程规划不存在")
+    await db.execute(
+        update(LearningPlan)
+        .where(
+            LearningPlan.user_id == user.id,
+            LearningPlan.status == "adopted",
+            LearningPlan.id != plan.id,
+        )
+        .values(status="archived", updated_at=utcnow())
+    )
+    plan.status = "adopted"
+    plan.updated_at = utcnow()
+    await db.commit()
+    await db.refresh(plan)
+    return {"plan": _saved_plan_dict(plan)}
 
 
 def _plan_item(it) -> dict:

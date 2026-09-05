@@ -103,6 +103,24 @@ class RecommendationReport(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
+class LearningPlan(Base):
+    """账号级课程规划快照，保存生成结果和用户采用状态。"""
+
+    __tablename__ = "learning_plans"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    program_name: Mapped[str] = mapped_column(String(200))
+    profile_version: Mapped[int] = mapped_column(default=0)
+    status: Mapped[str] = mapped_column(String(20), default="draft")  # draft/adopted/archived
+    items: Mapped[list] = mapped_column(JSON, default=list)
+    alternatives: Mapped[list] = mapped_column(JSON, default=list)
+    warnings: Mapped[list] = mapped_column(JSON, default=list)
+    infeasible: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
 class Conversation(Base):
     __tablename__ = "conversations"
 
