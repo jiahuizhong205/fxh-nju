@@ -352,6 +352,11 @@ class BackendContractTests(unittest.TestCase):
         self.assertEqual(summary["planned_credits"], 4)
         self.assertEqual(summary["total_credits"], 9)
 
+    def test_learning_completion_percentage_is_bounded_and_target_aware(self):
+        self.assertEqual(account._calculate_completion_percent(28, 50), 56)
+        self.assertEqual(account._calculate_completion_percent(80, 50), 100)
+        self.assertEqual(account._calculate_completion_percent(1, 0), 0)
+
     def test_recommendation_report_keeps_profile_version_and_payload(self):
         report = RecommendationReport(
             user_id="00000000-0000-0000-0000-000000000001",

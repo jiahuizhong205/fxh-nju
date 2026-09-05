@@ -11,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.api.database import get_db
-from apps.api.models import LearningActivity, LearningRecord, User, UserContact, utcnow
+from apps.api.models import LearningActivity, LearningPlan, LearningRecord, Program, User, UserContact, utcnow
 from apps.api.routes.auth import get_current_user
 
 router = APIRouter()
@@ -127,6 +127,12 @@ def _summarize_learning_activities(activities: list[LearningActivity], today: da
     return {"learning_days": len(days), "streak_days": streak}
 
 
+def _calculate_completion_percent(completed_credits: float, target_credits: float) -> int:
+    if target_credits <= 0:
+        return 0
+    return min(100, max(0, round(completed_credits / target_credits * 100)))
+
+
 @router.get("/auth/contacts")
 async def list_contacts(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     result = await db.execute(
@@ -211,9 +217,30 @@ async def learning_progress(user: User = Depends(get_current_user), db: AsyncSes
         select(LearningActivity).where(LearningActivity.user_id == user.id)
     )
     activities = activity_result.scalars().all()
+    plan_result = await db.execute(
+        select(LearningPlan)
+        .where(LearningPlan.user_id == user.id, LearningPlan.status == "adopted")
+        .order_by(LearningPlan.updated_at.desc())
+        .limit(1)
+    )
+    adopted_plan = plan_result.scalar_one_or_none()
+    target_credits = 0
+    plan_program = None
+    if adopted_plan:
+        plan_program = adopted_plan.program_name
+        program = await db.get(Program, adopted_plan.program_name)
+        target_credits = program.total_credits if program else sum(
+            float(item.get("credits", 0)) for item in adopted_plan.items or []
+        )
+    record_summary = _summarize_learning_records(records)
     return {
-        **_summarize_learning_records(records),
+        **record_summary,
         **_summarize_learning_activities(activities),
+        "target_credits": target_credits,
+        "completion_percent": _calculate_completion_percent(
+            record_summary["completed_credits"], target_credits
+        ),
+        "plan_program": plan_program,
         "records": [_serialize_learning_record(record) for record in records],
     }
 
