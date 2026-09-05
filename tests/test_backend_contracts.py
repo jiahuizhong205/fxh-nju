@@ -598,6 +598,39 @@ class BackendContractTests(unittest.TestCase):
         self.assertFalse(notifications._deliver_in_app(notification))
         self.assertEqual(notification.status, "queued")
 
+    def test_external_notification_delivery_retries_with_backoff_and_eventually_fails(self):
+        notification = Notification(
+            channel="email",
+            status="queued",
+            scheduled_at=utcnow() - timedelta(seconds=1),
+        )
+
+        def failed_sender(_notification):
+            raise RuntimeError("provider unavailable")
+
+        self.assertFalse(notifications._deliver_external(notification, failed_sender))
+        self.assertEqual(notification.status, "queued")
+        self.assertEqual(notification.retry_count, 1)
+        self.assertEqual(notification.last_error, "provider unavailable")
+        self.assertGreater(notification.scheduled_at, utcnow())
+
+        notification.scheduled_at = utcnow() - timedelta(seconds=1)
+        notifications._deliver_external(notification, failed_sender)
+        notification.scheduled_at = utcnow() - timedelta(seconds=1)
+        notifications._deliver_external(notification, failed_sender)
+        self.assertEqual(notification.status, "failed")
+        self.assertEqual(notification.retry_count, 3)
+
+    def test_external_notification_delivery_marks_success(self):
+        notification = Notification(
+            channel="webhook",
+            status="queued",
+            scheduled_at=utcnow() - timedelta(seconds=1),
+        )
+        self.assertTrue(notifications._deliver_external(notification, lambda _: None))
+        self.assertEqual(notification.status, "sent")
+        self.assertIsNotNone(notification.sent_at)
+
     def test_notification_preference_defaults_match_notification_page(self):
         user = User(preferences={})
         self.assertTrue(notifications._notification_enabled(user, "学习浇水提醒"))

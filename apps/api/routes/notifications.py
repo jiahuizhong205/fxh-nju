@@ -1,7 +1,7 @@
 """账号级站内通知 API。"""
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, Query, HTTPException
 from pydantic import BaseModel, StrictBool
@@ -21,6 +21,7 @@ DEFAULT_NOTIFICATION_PREFERENCES = {
     "推荐报告完成": False,
     "课表冲突预警": True,
 }
+MAX_EXTERNAL_NOTIFICATION_RETRIES = 3
 
 
 class NotificationReadRequest(BaseModel):
@@ -53,6 +54,31 @@ def _deliver_in_app(notification: Notification, now: datetime | None = None) -> 
         return False
     notification.status = "sent"
     notification.sent_at = now
+    notification.updated_at = now
+    return True
+
+
+def _deliver_external(notification: Notification, sender, now: datetime | None = None) -> bool:
+    """调用注入的外部供应商；失败按指数退避，超过上限进入 failed。"""
+    now = now or utcnow()
+    if notification.channel == "in_app" or notification.status != "queued":
+        return False
+    if notification.scheduled_at and notification.scheduled_at > now:
+        return False
+    try:
+        sender(notification)
+    except Exception as exc:  # provider boundary: persist failure, never leak it to the user
+        notification.retry_count = (notification.retry_count or 0) + 1
+        notification.last_error = str(exc)[:2000]
+        if notification.retry_count >= MAX_EXTERNAL_NOTIFICATION_RETRIES:
+            notification.status = "failed"
+        else:
+            notification.scheduled_at = now + timedelta(minutes=2 ** (notification.retry_count - 1))
+        notification.updated_at = now
+        return False
+    notification.status = "sent"
+    notification.sent_at = now
+    notification.last_error = ""
     notification.updated_at = now
     return True
 
