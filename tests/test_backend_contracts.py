@@ -449,6 +449,12 @@ class BackendContractTests(unittest.TestCase):
         self.assertEqual(meta.PRODUCT_METADATA["birth_year"], 2026)
         self.assertTrue(any(item["key"] == "planning" for item in meta.PRODUCT_METADATA["features"]))
 
+    def test_legal_documents_are_explicitly_marked_as_drafts(self):
+        documents = meta.get_legal_documents()
+        self.assertTrue(documents["review_required"])
+        self.assertEqual({item["key"] for item in documents["documents"]}, {"terms", "privacy", "open_source"})
+        self.assertTrue(all(item["status"] == "draft" for item in documents["documents"]))
+
     def test_account_link_requires_explicit_relation_for_switching(self):
         current_id = "00000000-0000-0000-0000-000000000001"
         target_id = "00000000-0000-0000-0000-000000000002"
