@@ -222,6 +222,24 @@ class JobFavorite(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
+class JobApplication(Base):
+    """账号级岗位跟进记录，不代替外部招聘网站的实际投递。"""
+
+    __tablename__ = "job_applications"
+    __table_args__ = (
+        UniqueConstraint("user_id", "job_id", name="uq_job_applications_user_job"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    job_id: Mapped[str] = mapped_column(ForeignKey("jobs.id", ondelete="CASCADE"))
+    status: Mapped[str] = mapped_column(String(20), default="interested")
+    channel: Mapped[str] = mapped_column(String(100), default="")
+    note: Mapped[str] = mapped_column(Text, default="")
+    applied_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
 class UserContact(Base):
     """账号联系方式及其验证状态。"""
 

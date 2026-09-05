@@ -4,6 +4,8 @@
 """
 
 import uuid
+from datetime import datetime
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -13,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from apps.api.database import get_db
 from apps.api.models import (
     StudentProfile, Program, ProgramPlanItem, Course, Job, JobFavorite,
-    RecommendationReport, LearningPlan, User, utcnow,
+    RecommendationReport, LearningPlan, JobApplication, User, utcnow,
 )
 from apps.api.routes.auth import get_current_user
 from services.planning.recommendation_engine import recommend
@@ -43,6 +45,13 @@ class PlanItemInput(BaseModel):
 
 class PlanUpdateRequest(BaseModel):
     items: list[PlanItemInput] = Field(min_length=1, max_length=100)
+
+
+class JobApplicationUpdate(BaseModel):
+    status: Literal["interested", "applied", "screening", "interview", "offer", "rejected", "withdrawn"]
+    channel: str = Field(default="", max_length=100)
+    note: str = Field(default="", max_length=2000)
+    applied_at: datetime | None = None
 
 
 async def _latest_profile(db: AsyncSession, user_id) -> dict | None:
@@ -387,6 +396,93 @@ async def list_jobs(major: str | None = None, minor: str | None = None, db: Asyn
     if major:
         return {"jobs": match_jobs(major, minor, jobs)}
     return {"jobs": jobs}
+
+
+def _job_application_dict(application: JobApplication) -> dict:
+    return {
+        "id": str(application.id),
+        "job_id": application.job_id,
+        "status": application.status,
+        "channel": application.channel,
+        "note": application.note,
+        "applied_at": application.applied_at.isoformat() if application.applied_at else None,
+        "updated_at": application.updated_at.isoformat() if application.updated_at else None,
+    }
+
+
+@router.get("/jobs/applications")
+async def list_job_applications(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(JobApplication)
+        .where(JobApplication.user_id == user.id)
+        .order_by(JobApplication.updated_at.desc())
+    )
+    return {"applications": [_job_application_dict(item) for item in result.scalars().all()]}
+
+
+@router.put("/jobs/{job_id}/application")
+async def upsert_job_application(
+    job_id: str,
+    payload: JobApplicationUpdate,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    job = await db.get(Job, job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="岗位不存在")
+    result = await db.execute(
+        select(JobApplication).where(
+            JobApplication.user_id == user.id,
+            JobApplication.job_id == job_id,
+        )
+    )
+    application = result.scalar_one_or_none()
+    applied_at = payload.applied_at
+    if payload.status == "applied" and applied_at is None:
+        applied_at = utcnow()
+    if application:
+        application.status = payload.status
+        application.channel = payload.channel.strip()
+        application.note = payload.note.strip()
+        application.applied_at = applied_at
+        application.updated_at = utcnow()
+    else:
+        application = JobApplication(
+            user_id=user.id,
+            job_id=job_id,
+            status=payload.status,
+            channel=payload.channel.strip(),
+            note=payload.note.strip(),
+            applied_at=applied_at,
+            updated_at=utcnow(),
+        )
+        db.add(application)
+    await db.commit()
+    await db.refresh(application)
+    return {"application": _job_application_dict(application)}
+
+
+@router.delete("/jobs/{job_id}/application")
+async def delete_job_application(
+    job_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(JobApplication).where(
+            JobApplication.user_id == user.id,
+            JobApplication.job_id == job_id,
+        )
+    )
+    application = result.scalar_one_or_none()
+    if not application:
+        raise HTTPException(status_code=404, detail="投递记录不存在")
+    await db.delete(application)
+    await db.commit()
+    return {"status": "deleted", "job_id": job_id}
 
 
 @router.get("/jobs/{job_id}")
