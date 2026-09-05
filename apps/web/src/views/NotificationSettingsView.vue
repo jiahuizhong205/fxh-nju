@@ -56,7 +56,7 @@ async function save() {
 
     <p class="page-sub">风铃要响几声？ 🌿</p>
 
-    <section class="card" style="padding: 0; overflow: hidden;">
+    <section class="notification-card">
       <div v-for="s in settings" :key="s.label" class="row">
         <span class="row-icon">{{ s.icon }}</span>
         <div class="row-main">
@@ -80,9 +80,15 @@ async function save() {
 .page-sub { font-size: var(--text-sm); color: var(--text-muted); margin-bottom: var(--space-2); }
 .illus { display: flex; justify-content: center; margin: var(--space-2) 0 var(--space-3); }
 .illus img { width: 100%; max-width: 390px; height: auto; }
-.row { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-4); border-bottom: 1px solid var(--bg-subtle); }
+.notification-card { padding: var(--space-2) var(--space-4); background: var(--bg-green-faint); border: 1px solid var(--bg-green-soft); border-radius: var(--radius-lg); }
+.row { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3) 0; border-bottom: 1px solid var(--bg-green-soft); }
 .row:last-child { border-bottom: none; }
-.row-icon { font-size: var(--text-xl); flex-shrink: 0; }
+.row-icon { width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border-radius: var(--radius-full); background: var(--bg-surface); font-size: var(--text-xl); flex-shrink: 0; }
+.row:nth-child(1) .row-icon { background: var(--bg-green-soft); }
+.row:nth-child(2) .row-icon { background: var(--bg-pink-soft); }
+.row:nth-child(3) .row-icon { background: var(--bg-green-soft); }
+.row:nth-child(4) .row-icon { background: var(--accent-purple-soft); }
+.row:nth-child(5) .row-icon { background: var(--bg-subtle); }
 .row-main { flex: 1; }
 .row-label { font-size: var(--text-base); color: var(--text-primary); }
 .row-desc { margin-top: 2px; font-size: var(--text-xs); color: var(--text-muted); }
