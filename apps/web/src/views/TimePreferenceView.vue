@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { fetchProfile, updateProfile } from '../api/client'
 import BackButton from '../components/BackButton.vue'
 
 const router = useRouter()
+const route = useRoute()
 
 const moods = ref([
   { name: '晨光', icon: '🌅', active: false },
@@ -52,7 +53,7 @@ async function save() {
       prefer_late: selected.value.includes('晚间高效派'),
     },
   })
-  router.push('/conflict-resolution')
+  router.push(route.query.onboarding === '1' ? { path: '/interest-selection', query: { onboarding: '1', stage: '2' } } : '/conflict-resolution')
 }
 </script>
 

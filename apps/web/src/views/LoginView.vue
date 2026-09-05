@@ -27,7 +27,7 @@ async function submit() {
       ? await apiLogin(username.value.trim(), password.value)
       : await apiRegister(username.value.trim(), password.value, nickname.value.trim())
     auth.setAuth(res.token, res.user)
-    router.push('/')
+    router.push(mode.value === 'register' ? '/interest-selection' : '/')
   } catch (e: any) {
     error.value = e.message
   } finally {

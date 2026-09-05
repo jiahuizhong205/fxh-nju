@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { fetchProfile, updateProfile } from '../api/client'
 import BackButton from '../components/BackButton.vue'
 
 const router = useRouter()
+const route = useRoute()
 
 const strategies = ref([
   { icon: '📝', name: '免修不免考申请', desc: '申请免修不免考，主修/辅修冲突课程可自学参加考试', note: '需向院系提交申请，部分课程适用', enabled: true },
@@ -29,7 +30,7 @@ onMounted(async () => {
 async function save() {
   const enabled = strategies.value.filter(s => s.enabled).map(s => s.name)
   await updateProfile({ schedule_preferences: { conflict_strategies: enabled } })
-  router.push('/recommend')
+  router.push(route.query.onboarding === '1' ? { path: '/interest-selection', query: { onboarding: '1', stage: '2' } } : '/recommend')
 }
 </script>
 
