@@ -24,6 +24,7 @@ from apps.api.routes import sync
 from apps.api.routes import notifications
 from packages.contracts.schemas import ChatRequest
 from services.planning.recommendation_engine import hard_filter, recommend
+from services.planning.eligibility import evaluate_program_eligibility
 from services.planning.schedule_conflicts import detect_schedule_conflicts
 
 
@@ -547,6 +548,35 @@ class BackendContractTests(unittest.TestCase):
         )
         self.assertTrue(result.passed)
         self.assertNotIn("不接受修高数", " ".join(result.reasons))
+
+    def test_program_eligibility_reports_missing_courses_and_manual_review(self):
+        result = evaluate_program_eligibility(
+            {
+                "name": "新闻学",
+                "total_credits": 6,
+                "required_math": False,
+            },
+            [
+                {"course": "新闻采访与写作", "credits": 3},
+                {"course": "传播学概论", "credits": 3},
+            ],
+            [{"course_name": "新闻采访与写作", "credits": 3, "status": "completed"}],
+        )
+        self.assertFalse(result["estimated_eligible"])
+        self.assertTrue(result["requires_manual_review"])
+        self.assertEqual(result["missing_courses"], ["传播学概论"])
+        self.assertEqual(result["completed_credits"], 3.0)
+        self.assertTrue(any("尚缺" in reason for reason in result["manual_review_reasons"]))
+
+    def test_program_eligibility_never_claims_official_qualification(self):
+        result = evaluate_program_eligibility(
+            {"name": "新闻学", "total_credits": 3, "required_math": False},
+            [{"course": "新闻采访与写作", "credits": 3}],
+            [{"course_name": "新闻采访与写作", "credits": 3, "status": "completed"}],
+        )
+        self.assertTrue(result["estimated_eligible"])
+        self.assertTrue(result["requires_manual_review"])
+        self.assertTrue(any("最终资格" in reason for reason in result["manual_review_reasons"]))
 
     def test_learning_activity_keeps_date_and_duration(self):
         activity = LearningActivity(

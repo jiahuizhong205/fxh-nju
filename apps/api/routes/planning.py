@@ -21,6 +21,7 @@ from apps.api.routes.auth import get_current_user
 from services.planning.recommendation_engine import recommend
 from services.planning.course_planner import generate_plan, PROGRAM_PLANS
 from services.planning.career_engine import match_jobs
+from services.planning.eligibility import evaluate_program_eligibility
 
 router = APIRouter()
 
@@ -212,6 +213,57 @@ async def program_prerequisites(
             "evidence": [course for course in completed if "高等数学" in course or "高数" in course],
         })
     return {"program": program_name, "requirements": requirements}
+
+
+@router.get("/programs/{program_name}/eligibility")
+async def program_eligibility(
+    program_name: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """返回基于已修课程的专业资格估算，不替代正式教务审核。"""
+    program = await db.get(Program, program_name)
+    if not program:
+        raise HTTPException(status_code=404, detail=f"未找到「{program_name}」")
+
+    plan_result = await db.execute(
+        select(ProgramPlanItem)
+        .where(ProgramPlanItem.program_name == program_name)
+        .order_by(ProgramPlanItem.semester, ProgramPlanItem.id)
+    )
+    db_items = plan_result.scalars().all()
+    plan_items = [
+        {
+            "semester": item.semester,
+            "term": item.term,
+            "course": item.course,
+            "credits": item.credits,
+            "campus": item.campus,
+        }
+        for item in db_items
+    ] or PROGRAM_PLANS.get(program_name, [])
+
+    records_result = await db.execute(
+        select(LearningRecord).where(LearningRecord.user_id == user.id)
+    )
+    records = [
+        {
+            "course_name": record.course_name,
+            "credits": record.credits,
+            "status": record.status,
+        }
+        for record in records_result.scalars().all()
+    ]
+    return evaluate_program_eligibility(
+        {
+            "name": program.name,
+            "total_credits": program.total_credits,
+            "required_math": program.required_math,
+            "required_math_level": program.required_math_level,
+        },
+        plan_items,
+        records,
+    )
 
 
 @router.put("/programs/{program_name}/enrollment")
