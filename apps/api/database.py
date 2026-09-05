@@ -42,6 +42,10 @@ async def init_db():
                 "onboarding_completed BOOLEAN NOT NULL DEFAULT FALSE"
             ))
             await conn.execute(text(
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS "
+                "is_admin BOOLEAN NOT NULL DEFAULT FALSE"
+            ))
+            await conn.execute(text(
                 "ALTER TABLE recommendation_reports ADD COLUMN IF NOT EXISTS "
                 "is_stale BOOLEAN NOT NULL DEFAULT FALSE"
             ))

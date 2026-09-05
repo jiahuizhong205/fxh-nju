@@ -3,9 +3,10 @@
 import hashlib
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
+from typing import Literal
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -31,6 +32,15 @@ class FeedbackCreate(BaseModel):
     content: str = Field(min_length=1, max_length=5000)
     contact: str = Field(default="", max_length=200)
     attachments: list[str] = Field(default_factory=list, max_length=3)
+
+
+class FeedbackAdminUpdate(BaseModel):
+    status: Literal["received", "in_progress", "resolved"]
+
+
+def _require_admin(user: User) -> None:
+    if not user.is_admin:
+        raise HTTPException(status_code=403, detail="需要管理员权限")
 
 
 def _validate_attachment(content_type: str | None, content: bytes) -> None:
@@ -90,6 +100,43 @@ async def list_feedback(
         .order_by(Feedback.created_at.desc())
     )
     return {"feedback": [_serialize_feedback(item) for item in result.scalars().all()]}
+
+
+@router.get("/admin/feedback")
+async def admin_list_feedback(
+    limit: int = Query(default=50, ge=1, le=200),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    _require_admin(user)
+    result = await db.execute(
+        select(Feedback).order_by(Feedback.updated_at.desc()).limit(limit)
+    )
+    return {
+        "feedback": [
+            {**_serialize_feedback(item), "user_id": str(item.user_id)}
+            for item in result.scalars().all()
+        ]
+    }
+
+
+@router.patch("/admin/feedback/{feedback_id}")
+async def admin_update_feedback(
+    feedback_id: UUID,
+    payload: FeedbackAdminUpdate,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    _require_admin(user)
+    result = await db.execute(select(Feedback).where(Feedback.id == feedback_id))
+    feedback = result.scalar_one_or_none()
+    if not feedback:
+        raise HTTPException(status_code=404, detail="反馈不存在")
+    feedback.status = payload.status
+    feedback.updated_at = utcnow()
+    await db.commit()
+    await db.refresh(feedback)
+    return {"feedback": _serialize_feedback(feedback)}
 
 
 @router.get("/feedback/{feedback_id}")

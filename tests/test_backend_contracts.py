@@ -489,6 +489,15 @@ class BackendContractTests(unittest.TestCase):
         self.assertEqual(attachment.filename, "screen.png")
         self.assertEqual(len(attachment.sha256), 64)
 
+    def test_feedback_admin_guard_rejects_normal_users(self):
+        user = User(is_admin=False)
+        with self.assertRaises(HTTPException) as ctx:
+            feedback._require_admin(user)
+        self.assertEqual(ctx.exception.status_code, 403)
+
+        admin = User(is_admin=True)
+        self.assertIsNone(feedback._require_admin(admin))
+
     def test_unverified_contact_cannot_become_primary(self):
         contact = UserContact(contact_type="phone", value="13800138000", verified=False, is_primary=False)
         self.assertFalse(contact.is_primary)
