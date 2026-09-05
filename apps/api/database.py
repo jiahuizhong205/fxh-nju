@@ -50,6 +50,14 @@ async def init_db():
                 "is_stale BOOLEAN NOT NULL DEFAULT FALSE"
             ))
             await conn.execute(text(
+                "ALTER TABLE recommendation_reports ADD COLUMN IF NOT EXISTS "
+                "sync_fingerprint VARCHAR(64) NOT NULL DEFAULT ''"
+            ))
+            await conn.execute(text(
+                "ALTER TABLE learning_plans ADD COLUMN IF NOT EXISTS "
+                "sync_fingerprint VARCHAR(64) NOT NULL DEFAULT ''"
+            ))
+            await conn.execute(text(
                 "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS remote_type VARCHAR(50) NOT NULL DEFAULT ''"
             ))
             await conn.execute(text(

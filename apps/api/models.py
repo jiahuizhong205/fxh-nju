@@ -254,6 +254,7 @@ class RecommendationReport(Base):
     profile_snapshot: Mapped[dict] = mapped_column(JSON, default=dict)
     recommendations: Mapped[list] = mapped_column(JSON, default=list)
     is_stale: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    sync_fingerprint: Mapped[str] = mapped_column(String(64), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
@@ -272,6 +273,7 @@ class LearningPlan(Base):
     warnings: Mapped[list] = mapped_column(JSON, default=list)
     infeasible: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     schedule_analysis: Mapped[dict] = mapped_column(JSON, default=dict)
+    sync_fingerprint: Mapped[str] = mapped_column(String(64), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 

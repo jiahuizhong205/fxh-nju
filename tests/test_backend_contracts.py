@@ -1269,6 +1269,13 @@ class BackendContractTests(unittest.TestCase):
         self.assertEqual(result["snapshot"]["schema_version"], 1)
         self.assertTrue(result["requires_confirmation"])
 
+    def test_sync_fingerprint_is_stable_and_changes_with_business_content(self):
+        first = {"id": "remote-id", "program": "新闻学", "items": [{"course": "传播学概论"}], "updated_at": "one"}
+        second = {"id": "another-id", "program": "新闻学", "items": [{"course": "传播学概论"}], "updated_at": "two"}
+        changed = {**first, "items": [{"course": "数据新闻"}]}
+        self.assertEqual(sync._sync_fingerprint("learning_plans", first), sync._sync_fingerprint("learning_plans", second))
+        self.assertNotEqual(sync._sync_fingerprint("learning_plans", first), sync._sync_fingerprint("learning_plans", changed))
+
     def test_sync_worker_exposes_single_cycle_entrypoint(self):
         from scripts import sync_worker
 

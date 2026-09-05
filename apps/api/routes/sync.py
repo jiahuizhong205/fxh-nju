@@ -1,5 +1,7 @@
 """账号数据同步检查点 API。"""
 
+import hashlib
+import json
 import uuid
 from datetime import datetime
 from typing import Literal
@@ -83,6 +85,22 @@ def _serialize_snapshot(user: User, scopes: dict) -> dict:
 
 def _is_duplicate_request(record: SyncRecord, request_id: uuid.UUID) -> bool:
     return bool(record.last_request_id) and record.last_request_id == str(request_id)
+
+
+def _sync_fingerprint(scope: str, item: dict) -> str:
+    """对跨端可同步的业务内容计算稳定指纹，排除本地 ID 和时间字段。"""
+    normalized = {
+        key: value
+        for key, value in item.items()
+        if key not in {"id", "created_at", "updated_at", "sync_fingerprint"}
+    }
+    raw = json.dumps(
+        {"scope": scope, "item": normalized},
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(raw).hexdigest()
 
 
 def _sync_provider_payload(user: User, snapshot: dict, base_versions: dict[str, int]) -> dict:
@@ -228,6 +246,12 @@ async def export_sync_snapshot(
             "recommendations": item.recommendations or [],
             "is_stale": item.is_stale,
             "created_at": item.created_at.isoformat() if item.created_at else None,
+            "sync_fingerprint": item.sync_fingerprint or _sync_fingerprint("recommendation_reports", {
+                "profile_version": item.profile_version,
+                "profile_snapshot": item.profile_snapshot or {},
+                "recommendations": item.recommendations or [],
+                "is_stale": item.is_stale,
+            }),
         } for item in result.scalars().all()]
 
     if "learning_plans" in requested:
@@ -248,6 +272,16 @@ async def export_sync_snapshot(
             "infeasible": item.infeasible,
             "schedule_analysis": item.schedule_analysis or {},
             "updated_at": item.updated_at.isoformat() if item.updated_at else None,
+            "sync_fingerprint": item.sync_fingerprint or _sync_fingerprint("learning_plans", {
+                "program": item.program_name,
+                "profile_version": item.profile_version,
+                "status": item.status,
+                "items": item.items or [],
+                "alternatives": item.alternatives or [],
+                "warnings": item.warnings or [],
+                "infeasible": item.infeasible,
+                "schedule_analysis": item.schedule_analysis or {},
+            }),
         } for item in result.scalars().all()]
 
     if "job_favorites" in requested:
@@ -465,8 +499,20 @@ async def import_sync_snapshot(
                     counts[scope]["added"] += 1
 
         elif scope == "learning_plans" and isinstance(raw_scope, list):
+            existing_result = await db.execute(
+                select(LearningPlan).where(LearningPlan.user_id == user.id)
+            )
+            existing_fingerprints = {
+                item.sync_fingerprint
+                for item in existing_result.scalars().all()
+                if item.sync_fingerprint
+            }
             for item in raw_scope[:20]:
                 if not isinstance(item, dict) or not isinstance(item.get("program"), str):
+                    counts[scope]["skipped"] += 1
+                    continue
+                fingerprint = item.get("sync_fingerprint") or _sync_fingerprint("learning_plans", item)
+                if fingerprint in existing_fingerprints:
                     counts[scope]["skipped"] += 1
                     continue
                 db.add(LearningPlan(
@@ -479,12 +525,26 @@ async def import_sync_snapshot(
                     warnings=item.get("warnings", []) if isinstance(item.get("warnings", []), list) else [],
                     infeasible=bool(item.get("infeasible", False)),
                     schedule_analysis=item.get("schedule_analysis", {}) if isinstance(item.get("schedule_analysis", {}), dict) else {},
+                    sync_fingerprint=fingerprint,
                 ))
+                existing_fingerprints.add(fingerprint)
                 counts[scope]["added"] += 1
 
         elif scope == "recommendation_reports" and isinstance(raw_scope, list):
+            existing_result = await db.execute(
+                select(RecommendationReport).where(RecommendationReport.user_id == user.id)
+            )
+            existing_fingerprints = {
+                item.sync_fingerprint
+                for item in existing_result.scalars().all()
+                if item.sync_fingerprint
+            }
             for item in raw_scope[:20]:
                 if not isinstance(item, dict):
+                    counts[scope]["skipped"] += 1
+                    continue
+                fingerprint = item.get("sync_fingerprint") or _sync_fingerprint("recommendation_reports", item)
+                if fingerprint in existing_fingerprints:
                     counts[scope]["skipped"] += 1
                     continue
                 db.add(RecommendationReport(
@@ -493,7 +553,9 @@ async def import_sync_snapshot(
                     profile_snapshot=item.get("profile_snapshot", {}) if isinstance(item.get("profile_snapshot", {}), dict) else {},
                     recommendations=item.get("recommendations", []) if isinstance(item.get("recommendations", []), list) else [],
                     is_stale=True,
+                    sync_fingerprint=fingerprint,
                 ))
+                existing_fingerprints.add(fingerprint)
                 counts[scope]["added"] += 1
 
         if record:
