@@ -58,6 +58,28 @@ def _new_session(user_id, token: str, request: Request | None = None) -> UserSes
     )
 
 
+def _assess_login_risk(
+    existing_sessions: list[UserSession],
+    ip_address: str,
+    user_agent: str,
+) -> tuple[str, str]:
+    """基于已有会话的环境标记登录风险，不直接阻断登录。"""
+    active = [item for item in existing_sessions if _session_is_active(item)]
+    if not active:
+        return "normal", ""
+    known_ips = {item.ip_address for item in active if item.ip_address}
+    known_user_agents = {item.user_agent for item in active if item.user_agent}
+    new_ip = bool(ip_address and known_ips and ip_address not in known_ips)
+    new_user_agent = bool(user_agent and known_user_agents and user_agent not in known_user_agents)
+    if new_ip and new_user_agent:
+        return "elevated", "new_ip_and_user_agent"
+    if new_ip:
+        return "elevated", "new_ip"
+    if new_user_agent:
+        return "elevated", "new_user_agent"
+    return "normal", ""
+
+
 async def _revoke_user_sessions(db: AsyncSession, user_id, now: datetime | None = None) -> None:
     now = now or utcnow()
     result = await db.execute(select(UserSession).where(
@@ -172,11 +194,34 @@ async def login(payload: _Credentials, request: Request, db: AsyncSession = Depe
     if not user or not _verify_password(payload.password, user.salt, user.password_hash):
         raise HTTPException(status_code=401, detail="用户名或密码错误")
 
+    active_sessions_result = await db.execute(select(UserSession).where(
+        UserSession.user_id == user.id,
+        UserSession.revoked_at.is_(None),
+    ))
+    ip_address = (request.client.host if request.client else "")[:64]
+    user_agent = request.headers.get("user-agent", "")[:500]
+    risk_level, risk_reason = _assess_login_risk(
+        active_sessions_result.scalars().all(), ip_address, user_agent
+    )
     user.token = secrets.token_urlsafe(32)
-    db.add(_new_session(user.id, user.token, request))
+    session = _new_session(user.id, user.token, request)
+    session.risk_level = risk_level
+    session.risk_reason = risk_reason
+    db.add(session)
+    if risk_level == "elevated":
+        # 延迟导入以避免 notifications -> auth 的依赖环。
+        from apps.api.routes.notifications import enqueue_notification
+
+        await enqueue_notification(
+            db,
+            user.id,
+            "security_login",
+            "检测到新的登录环境",
+            "你的账号刚刚从新的网络或设备登录；如非本人操作，请立即修改密码。",
+        )
     await db.commit()
     await db.refresh(user)
-    return {"token": user.token, "user": _serialize_user(user)}
+    return {"token": user.token, "user": _serialize_user(user), "risk_level": risk_level}
 
 
 @router.post("/auth/logout")
@@ -259,6 +304,8 @@ def _serialize_session(session: UserSession) -> dict:
         "expires_at": session.expires_at.isoformat() if session.expires_at else None,
         "revoked_at": session.revoked_at.isoformat() if session.revoked_at else None,
         "active": _session_is_active(session),
+        "risk_level": session.risk_level or "normal",
+        "risk_reason": session.risk_reason or "",
     }
 
 

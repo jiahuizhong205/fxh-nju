@@ -104,6 +104,14 @@ async def init_db():
                 "provider_synced_at TIMESTAMP NULL"
             ))
             await conn.execute(text(
+                "ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS "
+                "risk_level VARCHAR(20) NOT NULL DEFAULT 'normal'"
+            ))
+            await conn.execute(text(
+                "ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS "
+                "risk_reason VARCHAR(50) NOT NULL DEFAULT ''"
+            ))
+            await conn.execute(text(
                 "ALTER TABLE verification_challenges ADD COLUMN IF NOT EXISTS "
                 "purpose VARCHAR(30) NOT NULL DEFAULT 'contact_verification'"
             ))

@@ -84,6 +84,8 @@ class UserSession(Base):
     last_seen_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     expires_at: Mapped[datetime] = mapped_column(DateTime)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    risk_level: Mapped[str] = mapped_column(String(20), default="normal")
+    risk_reason: Mapped[str] = mapped_column(String(50), default="")
 
 
 class UserAccountLink(Base):

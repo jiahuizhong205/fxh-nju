@@ -869,6 +869,32 @@ class BackendContractTests(unittest.TestCase):
         session.revoked_at = utcnow()
         self.assertFalse(auth._session_is_active(session))
 
+    def test_login_risk_marks_new_ip_or_user_agent_without_rejecting_login(self):
+        known = UserSession(
+            ip_address="10.0.0.1",
+            user_agent="browser-a",
+            expires_at=utcnow() + timedelta(days=1),
+        )
+        self.assertEqual(
+            auth._assess_login_risk([known], "10.0.0.2", "browser-a"),
+            ("elevated", "new_ip"),
+        )
+        self.assertEqual(
+            auth._assess_login_risk([known], "10.0.0.1", "browser-b"),
+            ("elevated", "new_user_agent"),
+        )
+        self.assertEqual(
+            auth._assess_login_risk([known], "10.0.0.1", "browser-a"),
+            ("normal", ""),
+        )
+
+    def test_user_session_exposes_risk_state_without_credentials(self):
+        session = UserSession(risk_level="elevated", risk_reason="new_ip")
+        serialized = auth._serialize_session(session)
+        self.assertEqual(serialized["risk_level"], "elevated")
+        self.assertEqual(serialized["risk_reason"], "new_ip")
+        self.assertNotIn("token", serialized)
+
     def test_user_session_serialization_exposes_metadata_not_token(self):
         session = UserSession(
             user_agent="browser",
