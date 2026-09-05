@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.api.config import settings
 from apps.api.database import async_session, init_db
-from apps.api.routes import account, auth, chat, feedback, knowledge, notifications, preferences, profile, planning, sync
+from apps.api.routes import account, auth, cache, chat, feedback, knowledge, notifications, preferences, profile, planning, sync
 from apps.api.middleware import (
     RateLimitMiddleware,
     SecurityHeadersMiddleware,
@@ -75,6 +75,7 @@ app.include_router(feedback.router, prefix="/api/v1", tags=["feedback"])
 app.include_router(planning.router, prefix="/api/v1", tags=["planning"])
 app.include_router(sync.router, prefix="/api/v1", tags=["sync"])
 app.include_router(notifications.router, prefix="/api/v1", tags=["notifications"])
+app.include_router(cache.router, prefix="/api/v1", tags=["cache"])
 
 
 @app.get("/api/health")

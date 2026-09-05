@@ -13,7 +13,7 @@ from fastapi import HTTPException
 from pydantic import ValidationError
 
 from apps.api import config
-from apps.api.models import Feedback, Job, JobApplication, JobFavorite, KnowledgeProgress, LearningActivity, LearningPlan, LearningRecord, Notification, PasswordHistory, ProgramEnrollment, RecommendationReport, SyncRecord, User, UserContact, VerificationChallenge, utcnow
+from apps.api.models import CacheInvalidation, Feedback, Job, JobApplication, JobFavorite, KnowledgeProgress, LearningActivity, LearningPlan, LearningRecord, Notification, PasswordHistory, ProgramEnrollment, RecommendationReport, SyncRecord, User, UserContact, VerificationChallenge, utcnow
 from apps.api.routes import account
 from apps.api.routes import auth
 from apps.api.routes import knowledge
@@ -22,6 +22,7 @@ from apps.api.routes import preferences
 from apps.api.routes import profile
 from apps.api.routes import sync
 from apps.api.routes import notifications
+from apps.api.routes import cache
 from packages.contracts.schemas import ChatRequest
 from services.planning.recommendation_engine import hard_filter, recommend
 from services.planning.eligibility import evaluate_program_eligibility
@@ -396,6 +397,13 @@ class BackendContractTests(unittest.TestCase):
         self.assertTrue(profile._can_view_profile("同专业同学", is_self=False, same_major=True))
         self.assertFalse(profile._can_view_profile("同专业同学", is_self=False, same_major=False))
         self.assertFalse(profile._can_view_profile("仅好友", is_self=False, same_major=True))
+
+    def test_cache_clear_scopes_are_account_scoped_and_non_destructive(self):
+        payload = cache.CacheClearRequest(scopes=["images", "recommendations"])
+        self.assertEqual(payload.scopes, ["images", "recommendations"])
+        record = CacheInvalidation(scope="images", generation=2)
+        self.assertEqual(cache._serialize(record, "images")["generation"], 2)
+        self.assertEqual(cache._serialize(None, "conversations")["generation"], 0)
 
     def test_learning_progress_summary_uses_only_completed_credits(self):
         records = [

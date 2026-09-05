@@ -88,6 +88,22 @@ class SyncRecord(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
+class CacheInvalidation(Base):
+    """账号级缓存命名空间失效代次，不删除业务数据。"""
+
+    __tablename__ = "cache_invalidations"
+    __table_args__ = (
+        UniqueConstraint("user_id", "scope", name="uq_cache_invalidations_user_scope"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    scope: Mapped[str] = mapped_column(String(30))
+    generation: Mapped[int] = mapped_column(default=0)
+    last_cleared_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
 class Notification(Base):
     """账号级站内通知和投递状态。"""
 
