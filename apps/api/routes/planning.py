@@ -6,6 +6,8 @@
 import uuid
 import csv
 import io
+import hashlib
+import json
 from datetime import datetime
 from typing import Literal
 
@@ -17,7 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from apps.api.database import get_db
 from apps.api.models import (
     StudentProfile, Program, ProgramPlanItem, Course, Job, JobFavorite,
-    Notification, RecommendationReport, LearningPlan, JobApplication, LearningRecord, ProgramEnrollment, User, utcnow,
+    Notification, PlanExport, RecommendationReport, LearningPlan, JobApplication, LearningRecord, ProgramEnrollment, User, utcnow,
 )
 from apps.api.routes.auth import get_current_user
 from services.planning.recommendation_engine import recommend
@@ -531,6 +533,19 @@ def _plan_ics(plan: LearningPlan) -> str:
     return "\r\n".join(lines)
 
 
+def _serialize_export(export: PlanExport) -> dict:
+    return {
+        "id": str(export.id),
+        "plan_id": str(export.plan_id),
+        "format": export.format,
+        "status": export.status,
+        "content_sha256": export.content_sha256,
+        "error": export.error,
+        "created_at": export.created_at.isoformat() if export.created_at else None,
+        "completed_at": export.completed_at.isoformat() if export.completed_at else None,
+    }
+
+
 @router.post("/programs/plan")
 async def save_course_plan(
     payload: SavePlanRequest,
@@ -608,19 +623,63 @@ async def export_saved_plan(
     if not plan:
         raise HTTPException(status_code=404, detail="课程规划不存在")
     if format == "json":
-        return {"plan": _saved_plan_dict(plan), "exported_from": str(plan.id)}
-    from fastapi.responses import Response
-    if format == "ics":
-        return Response(
-            content=_plan_ics(plan),
-            media_type="text/calendar; charset=utf-8",
-            headers={"Content-Disposition": f'attachment; filename="{plan.program_name}-课程规划.ics"'},
+        export_content = json.dumps(
+            {"plan": _saved_plan_dict(plan), "exported_from": str(plan.id)},
+            ensure_ascii=False,
+            sort_keys=True,
         )
-    return Response(
-        content=_plan_csv(plan),
-        media_type="text/csv; charset=utf-8",
-        headers={"Content-Disposition": f'attachment; filename="{plan.program_name}-培养计划.csv"'},
+        media_type = "application/json; charset=utf-8"
+        filename = f"{plan.program_name}-课程规划.json"
+    elif format == "ics":
+        export_content = _plan_ics(plan)
+        media_type = "text/calendar; charset=utf-8"
+        filename = f"{plan.program_name}-课程规划.ics"
+    else:
+        export_content = _plan_csv(plan)
+        media_type = "text/csv; charset=utf-8"
+        filename = f"{plan.program_name}-培养计划.csv"
+
+    now = utcnow()
+    export = PlanExport(
+        user_id=user.id,
+        plan_id=plan.id,
+        format=format,
+        status="completed",
+        content_sha256=hashlib.sha256(export_content.encode("utf-8")).hexdigest(),
+        completed_at=now,
     )
+    db.add(export)
+    await db.commit()
+    await db.refresh(export)
+    if format == "json":
+        return {
+            "plan": _saved_plan_dict(plan),
+            "exported_from": str(plan.id),
+            "export_id": str(export.id),
+        }
+    from fastapi.responses import Response
+    return Response(
+        content=export_content,
+        media_type=media_type,
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "X-Export-ID": str(export.id),
+        },
+    )
+
+
+@router.get("/programs/exports")
+async def list_plan_exports(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(PlanExport)
+        .where(PlanExport.user_id == user.id)
+        .order_by(PlanExport.created_at.desc())
+        .limit(50)
+    )
+    return {"exports": [_serialize_export(item) for item in result.scalars().all()]}
 
 
 @router.patch("/programs/plans/{plan_id}")

@@ -15,7 +15,7 @@ from fastapi import HTTPException
 from pydantic import ValidationError
 
 from apps.api import config
-from apps.api.models import CacheInvalidation, Feedback, FeedbackAttachment, Job, JobApplication, JobFavorite, KnowledgeProgress, LearningActivity, LearningPlan, LearningRecord, Notification, PasswordHistory, ProgramEnrollment, RecommendationReport, SyncRecord, User, UserAccountLink, UserAvatar, UserContact, UserSession, VerificationChallenge, utcnow
+from apps.api.models import CacheInvalidation, Feedback, FeedbackAttachment, Job, JobApplication, JobFavorite, KnowledgeProgress, LearningActivity, LearningPlan, LearningRecord, Notification, PasswordHistory, PlanExport, ProgramEnrollment, RecommendationReport, SyncRecord, User, UserAccountLink, UserAvatar, UserContact, UserSession, VerificationChallenge, utcnow
 from apps.api.routes import account
 from apps.api.routes import auth
 from apps.api.routes import knowledge
@@ -607,6 +607,20 @@ class BackendContractTests(unittest.TestCase):
         self.assertIn("SUMMARY:传播学概论", exported)
         self.assertIn("学期：第1学年秋季", exported)
         self.assertTrue(exported.endswith("END:VCALENDAR\r\n"))
+
+    def test_plan_export_history_keeps_format_and_content_digest(self):
+        export = PlanExport(
+            user_id="00000000-0000-0000-0000-000000000001",
+            plan_id="00000000-0000-0000-0000-000000000002",
+            format="ics",
+            status="completed",
+            content_sha256="a" * 64,
+        )
+        serialized = planning._serialize_export(export)
+        self.assertEqual(serialized["format"], "ics")
+        self.assertEqual(serialized["status"], "completed")
+        self.assertEqual(serialized["content_sha256"], "a" * 64)
+        self.assertNotIn("content", serialized)
 
     def test_queued_in_app_notification_advances_to_sent_when_due(self):
         notification = Notification(

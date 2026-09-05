@@ -256,6 +256,22 @@ class LearningPlan(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
+class PlanExport(Base):
+    """课程计划导出记录；只保存摘要，不保存可重复下载的文件内容。"""
+
+    __tablename__ = "plan_exports"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    plan_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("learning_plans.id", ondelete="CASCADE"))
+    format: Mapped[str] = mapped_column(String(10))
+    status: Mapped[str] = mapped_column(String(20), default="completed")  # queued/completed/failed
+    content_sha256: Mapped[str] = mapped_column(String(64), default="")
+    error: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
 class Conversation(Base):
     __tablename__ = "conversations"
 
