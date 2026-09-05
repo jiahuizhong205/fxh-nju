@@ -132,6 +132,10 @@ async def init_db():
                 "delivered_at TIMESTAMP NULL"
             ))
             await conn.execute(text(
+                "ALTER TABLE verification_challenges ADD COLUMN IF NOT EXISTS "
+                "provider_message_id VARCHAR(200) NOT NULL DEFAULT ''"
+            ))
+            await conn.execute(text(
                 "ALTER TABLE feedback_attachments ADD COLUMN IF NOT EXISTS "
                 "storage_backend VARCHAR(30) NOT NULL DEFAULT 'database'"
             ))

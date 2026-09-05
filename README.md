@@ -94,7 +94,9 @@ Docker Compose 已包含同一个 `notification-worker` 服务；如需接入自
 供应商，可在 `.env` 中配置 `NOTIFICATION_PROVIDER_URL`、可选的
 `NOTIFICATION_PROVIDER_API_KEY` 和 `NOTIFICATION_WORKER_INTERVAL_SECONDS`。验证码
 投递使用 `VERIFICATION_PROVIDER_URL` 与可选的 `VERIFICATION_PROVIDER_API_KEY`，失败
-后最多按退避规则重试 3 次。
+后最多按退避规则重试 3 次。provider 返回 `message_id` 后，可向
+`/api/v1/auth/verification/provider-callback` 携带 `X-Verification-Provider-Secret`
+回传 `delivered`、`failed` 等状态，服务端会更新对应投递记录。
 
 反馈附件默认使用本地文件签名校验和数据库存储。生产环境可配置
 `FEEDBACK_SCAN_URL`（扫描 gateway 接收 multipart 字段 `file`，返回

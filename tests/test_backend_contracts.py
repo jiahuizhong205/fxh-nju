@@ -436,6 +436,20 @@ class BackendContractTests(unittest.TestCase):
         self.assertNotIn("password", payload)
         self.assertNotIn("code_hash", payload)
 
+    def test_verification_provider_delivery_status_normalizes_receipts(self):
+        self.assertEqual(account._normalize_provider_delivery_status("delivered"), "delivered")
+        self.assertEqual(account._normalize_provider_delivery_status("bounced"), "failed")
+        self.assertEqual(account._normalize_provider_delivery_status("accepted"), "sent")
+        self.assertIsNone(account._normalize_provider_delivery_status("unknown"))
+
+    def test_verification_challenge_can_track_provider_message_id(self):
+        challenge = VerificationChallenge(
+            provider_message_id="provider-msg-1",
+            delivery_status="delivered",
+        )
+        self.assertEqual(challenge.provider_message_id, "provider-msg-1")
+        self.assertEqual(challenge.delivery_status, "delivered")
+
     def test_visibility_policy_is_conservative_for_friend_scope(self):
         self.assertTrue(profile._can_view_profile("仅自己", is_self=True, same_major=False))
         self.assertTrue(profile._can_view_profile("全校公开", is_self=False, same_major=False))

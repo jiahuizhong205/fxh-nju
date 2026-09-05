@@ -474,6 +474,7 @@ class VerificationChallenge(Base):
     delivery_attempts: Mapped[int] = mapped_column(default=0)
     delivery_error: Mapped[str] = mapped_column(Text, default="")
     delivered_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    provider_message_id: Mapped[str] = mapped_column(String(200), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 

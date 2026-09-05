@@ -8,7 +8,7 @@ from datetime import date, datetime, timedelta
 from typing import Literal
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -85,6 +85,12 @@ class PasswordResetConfirm(BaseModel):
     new_password: str
 
 
+class VerificationProviderCallback(BaseModel):
+    message_id: str = Field(min_length=1, max_length=200)
+    status: str = Field(min_length=1, max_length=50)
+    error: str = Field(default="", max_length=500)
+
+
 def _normalize_contact(contact_type: str, value: str) -> str:
     value = value.strip()
     if contact_type == "phone":
@@ -149,6 +155,17 @@ def _verification_provider_payload(
     }
 
 
+def _normalize_provider_delivery_status(status: str) -> str | None:
+    status = (status or "").strip().lower()
+    if status in {"delivered", "delivery_succeeded"}:
+        return "delivered"
+    if status in {"failed", "bounced", "rejected", "undeliverable"}:
+        return "failed"
+    if status in {"sent", "accepted", "queued"}:
+        return "sent"
+    return None
+
+
 async def _deliver_verification_code(
     challenge: VerificationChallenge,
     contact: UserContact,
@@ -170,6 +187,7 @@ async def _deliver_verification_code(
                 headers=headers,
             )
             response.raise_for_status()
+            response_body = response.json()
     except Exception as exc:
         challenge.delivery_status = "failed"
         challenge.delivery_error = str(exc)[:2000]
@@ -177,6 +195,10 @@ async def _deliver_verification_code(
         return "failed"
     challenge.delivery_status = "sent"
     challenge.delivery_error = ""
+    if isinstance(response_body, dict):
+        challenge.provider_message_id = str(
+            response_body.get("message_id") or response_body.get("id") or ""
+        )[:200]
     challenge.delivered_at = utcnow()
     challenge.updated_at = utcnow()
     return "sent"
@@ -473,6 +495,36 @@ async def verify_contact(
     await db.commit()
     await db.refresh(contact)
     return {"status": "verified", "contact": _serialize_contact(contact)}
+
+
+@router.post("/auth/verification/provider-callback")
+async def verification_provider_callback(
+    payload: VerificationProviderCallback,
+    provider_secret: str = Header(default="", alias="X-Verification-Provider-Secret"),
+    db: AsyncSession = Depends(get_db),
+):
+    """接收短信/邮件 provider 的送达回执，需使用独立 webhook secret。"""
+    configured_secret = settings.verification_provider_webhook_secret
+    if not configured_secret:
+        raise HTTPException(status_code=503, detail="验证码回调尚未配置")
+    if not secrets.compare_digest(provider_secret, configured_secret):
+        raise HTTPException(status_code=401, detail="回调签名无效")
+    status = _normalize_provider_delivery_status(payload.status)
+    if status is None:
+        raise HTTPException(status_code=400, detail="不支持的投递状态")
+    result = await db.execute(select(VerificationChallenge).where(
+        VerificationChallenge.provider_message_id == payload.message_id,
+    ))
+    challenge = result.scalar_one_or_none()
+    if not challenge:
+        raise HTTPException(status_code=404, detail="投递记录不存在")
+    challenge.delivery_status = status
+    challenge.delivery_error = payload.error.strip() if status == "failed" else ""
+    if status == "delivered":
+        challenge.delivered_at = utcnow()
+    challenge.updated_at = utcnow()
+    await db.commit()
+    return {"status": "ok", "delivery_status": status}
 
 
 @router.post("/auth/password-reset/request")

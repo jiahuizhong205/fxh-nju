@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     verification_provider_url: str = ""
     verification_provider_api_key: str = ""
     verification_provider_timeout_seconds: float = 5.0
+    verification_provider_webhook_secret: str = ""
     # 外部通知 provider 可选；留空时 worker 只保留 queued，不伪造送达。
     notification_provider_url: str = ""
     notification_provider_api_key: str = ""
