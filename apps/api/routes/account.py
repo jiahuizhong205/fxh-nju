@@ -207,10 +207,10 @@ async def upsert_contact(
             is_primary=payload.is_primary,
         )
         db.add(contact)
-    elif payload.is_primary:
+    elif payload.is_primary and contact.verified:
         contact.is_primary = True
 
-    if payload.is_primary:
+    if payload.is_primary and contact.verified:
         others = await db.execute(
             select(UserContact).where(
                 UserContact.user_id == user.id,
@@ -306,11 +306,52 @@ async def verify_contact(
         raise HTTPException(status_code=400, detail=reason)
 
     contact.verified = True
+    if not contact.is_primary:
+        verified_primary = await db.execute(
+            select(UserContact).where(
+                UserContact.user_id == user.id,
+                UserContact.contact_type == contact.contact_type,
+                UserContact.verified.is_(True),
+                UserContact.is_primary.is_(True),
+                UserContact.id != contact.id,
+            )
+        )
+        if not verified_primary.scalar_one_or_none():
+            contact.is_primary = True
     contact.updated_at = utcnow()
     challenge.updated_at = utcnow()
     await db.commit()
     await db.refresh(contact)
     return {"status": "verified", "contact": _serialize_contact(contact)}
+
+
+@router.post("/auth/contacts/{contact_id}/primary")
+async def set_primary_contact(
+    contact_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(UserContact).where(
+        UserContact.id == contact_id,
+        UserContact.user_id == user.id,
+    ))
+    contact = result.scalar_one_or_none()
+    if not contact:
+        raise HTTPException(status_code=404, detail="联系方式不存在")
+    if not contact.verified:
+        raise HTTPException(status_code=400, detail="未验证的联系方式不能设为主联系方式")
+    others = await db.execute(select(UserContact).where(
+        UserContact.user_id == user.id,
+        UserContact.contact_type == contact.contact_type,
+        UserContact.id != contact.id,
+    ))
+    for other in others.scalars().all():
+        other.is_primary = False
+    contact.is_primary = True
+    contact.updated_at = utcnow()
+    await db.commit()
+    await db.refresh(contact)
+    return {"contact": _serialize_contact(contact), "status": "primary"}
 
 
 @router.delete("/auth/contacts/{contact_id}")
@@ -325,7 +366,21 @@ async def delete_contact(
     contact = result.scalar_one_or_none()
     if not contact:
         raise HTTPException(status_code=404, detail="联系方式不存在")
+    was_primary = contact.is_primary
+    contact_type = contact.contact_type
     await db.delete(contact)
+    if was_primary:
+        replacement = await db.execute(
+            select(UserContact).where(
+                UserContact.user_id == user.id,
+                UserContact.contact_type == contact_type,
+                UserContact.verified.is_(True),
+                UserContact.id != contact.id,
+            ).order_by(UserContact.created_at)
+        )
+        next_contact = replacement.scalars().first()
+        if next_contact:
+            next_contact.is_primary = True
     await db.commit()
     return {"status": "deleted"}
 

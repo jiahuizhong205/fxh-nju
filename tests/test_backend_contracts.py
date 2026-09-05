@@ -446,6 +446,13 @@ class BackendContractTests(unittest.TestCase):
         self.assertEqual(attachment.filename, "screen.png")
         self.assertEqual(len(attachment.sha256), 64)
 
+    def test_unverified_contact_cannot_become_primary(self):
+        contact = UserContact(contact_type="phone", value="13800138000", verified=False, is_primary=False)
+        self.assertFalse(contact.is_primary)
+        contact.verified = True
+        contact.is_primary = True
+        self.assertTrue(contact.verified and contact.is_primary)
+
     def test_schedule_options_prioritize_user_campus_and_report_missing_courses(self):
         options = build_schedule_options(
             [{"course": "新闻采访与写作", "credits": 3}, {"course": "传播学概论", "credits": 3}],
