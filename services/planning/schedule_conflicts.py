@@ -58,3 +58,43 @@ def detect_schedule_conflicts(
         "warnings": list(dict.fromkeys(warnings)),
         "feasible": not conflicts,
     }
+
+
+def build_schedule_options(
+    plan_items: list[dict],
+    course_offerings: list[dict],
+    user_campus: str = "",
+) -> dict:
+    """为培养方案课程组织实际教学班候选，并优先展示同校区班级。"""
+    options_by_name: dict[str, list[dict]] = {}
+    for offering in course_offerings:
+        options_by_name.setdefault(offering.get("course_name", ""), []).append(offering)
+
+    courses = []
+    missing_courses = []
+    seen = set()
+    for item in plan_items:
+        name = item.get("course", "")
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        options = sorted(
+            options_by_name.get(name, []),
+            key=lambda offering: (
+                0 if user_campus and offering.get("campus") == user_campus else 1,
+                offering.get("school_term", ""),
+                offering.get("teaching_class_id", ""),
+            ),
+        )
+        if not options:
+            missing_courses.append(name)
+        courses.append({
+            "course_name": name,
+            "required_credits": item.get("credits", 0),
+            "offerings": options,
+        })
+    return {
+        "courses": courses,
+        "missing_courses": missing_courses,
+        "all_available": not missing_courses,
+    }

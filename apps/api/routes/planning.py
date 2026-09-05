@@ -22,7 +22,7 @@ from services.planning.recommendation_engine import recommend
 from services.planning.course_planner import generate_plan, PROGRAM_PLANS
 from services.planning.career_engine import SAMPLE_JOBS, build_career_outcomes, match_jobs
 from services.planning.eligibility import evaluate_program_eligibility
-from services.planning.schedule_conflicts import detect_schedule_conflicts
+from services.planning.schedule_conflicts import build_schedule_options, detect_schedule_conflicts
 from services.rag.knowledge_graph import get_skill_pathways
 
 router = APIRouter()
@@ -668,6 +668,31 @@ async def program_courses(name: str, db: AsyncSession = Depends(get_db)):
         "program": name,
         "department": prog.department,
         "courses": [_course_dict(c) for c in result.scalars().all()],
+    }
+
+
+@router.get("/programs/{name}/schedule-options")
+async def program_schedule_options(
+    name: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """返回培养方案课程对应的实际教学班候选。"""
+    prog = await db.get(Program, name)
+    if not prog:
+        raise HTTPException(status_code=404, detail=f"未找到「{name}」")
+    db_plans = await _load_plans(db)
+    plans = {**PROGRAM_PLANS, **db_plans}
+    plan_items = plans.get(name, [])
+    course_result = await db.execute(
+        select(Course).where(Course.department == prog.department).order_by(Course.course_name)
+    )
+    offerings = [_course_dict(course) for course in course_result.scalars().all()]
+    profile = await _latest_profile(db, user.id) or {}
+    return {
+        "program": name,
+        "campus": profile.get("campus", ""),
+        **build_schedule_options(plan_items, offerings, profile.get("campus", "")),
     }
 
 

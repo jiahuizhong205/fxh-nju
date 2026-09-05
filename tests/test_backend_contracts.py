@@ -29,6 +29,7 @@ from packages.contracts.schemas import ChatRequest
 from services.planning.recommendation_engine import hard_filter, recommend
 from services.planning.eligibility import evaluate_program_eligibility
 from services.planning.schedule_conflicts import detect_schedule_conflicts
+from services.planning.schedule_conflicts import build_schedule_options
 from services.planning.career_engine import build_career_outcomes
 from services.rag.knowledge_graph import get_learning_pathways, get_node_resources, get_skill_pathways
 
@@ -444,6 +445,19 @@ class BackendContractTests(unittest.TestCase):
         )
         self.assertEqual(attachment.filename, "screen.png")
         self.assertEqual(len(attachment.sha256), 64)
+
+    def test_schedule_options_prioritize_user_campus_and_report_missing_courses(self):
+        options = build_schedule_options(
+            [{"course": "新闻采访与写作", "credits": 3}, {"course": "传播学概论", "credits": 3}],
+            [
+                {"course_name": "新闻采访与写作", "campus": "鼓楼校区", "teaching_class_id": "TC-2"},
+                {"course_name": "新闻采访与写作", "campus": "仙林校区", "teaching_class_id": "TC-1"},
+            ],
+            user_campus="仙林校区",
+        )
+        self.assertEqual(options["courses"][0]["offerings"][0]["teaching_class_id"], "TC-1")
+        self.assertEqual(options["missing_courses"], ["传播学概论"])
+        self.assertFalse(options["all_available"])
 
     def test_queued_in_app_notification_advances_to_sent_when_due(self):
         notification = Notification(
