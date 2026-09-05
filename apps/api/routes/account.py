@@ -68,6 +68,18 @@ class VerificationCodeInput(BaseModel):
     code: str = Field(min_length=6, max_length=6, pattern=r"^\d{6}$")
 
 
+class PasswordResetRequest(BaseModel):
+    username: str = Field(min_length=1, max_length=50)
+    contact_type: Literal["phone", "email"]
+
+
+class PasswordResetConfirm(BaseModel):
+    username: str = Field(min_length=1, max_length=50)
+    contact_type: Literal["phone", "email"]
+    code: str = Field(min_length=6, max_length=6, pattern=r"^\d{6}$")
+    new_password: str
+
+
 def _normalize_contact(contact_type: str, value: str) -> str:
     value = value.strip()
     if contact_type == "phone":
@@ -257,6 +269,7 @@ async def request_contact_verification_code(
         contact_id=contact.id,
         code_hash=digest,
         code_salt=salt,
+        purpose="contact_verification",
         expires_at=utcnow() + timedelta(minutes=10),
     )
     db.add(challenge)
@@ -323,6 +336,88 @@ async def verify_contact(
     await db.commit()
     await db.refresh(contact)
     return {"status": "verified", "contact": _serialize_contact(contact)}
+
+
+@router.post("/auth/password-reset/request")
+async def request_password_reset(
+    payload: PasswordResetRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """为已验证联系方式创建找回密码挑战，不泄露账号是否存在。"""
+    result = await db.execute(select(User).where(User.username == payload.username.strip()))
+    target = result.scalar_one_or_none()
+    if target:
+        contact_result = await db.execute(select(UserContact).where(
+            UserContact.user_id == target.id,
+            UserContact.contact_type == payload.contact_type,
+            UserContact.verified.is_(True),
+            UserContact.is_primary.is_(True),
+        ))
+        contact = contact_result.scalar_one_or_none()
+        if contact:
+            previous = await db.execute(select(VerificationChallenge).where(
+                VerificationChallenge.user_id == target.id,
+                VerificationChallenge.contact_id == contact.id,
+                VerificationChallenge.purpose == "password_reset",
+                VerificationChallenge.consumed.is_(False),
+            ))
+            for challenge in previous.scalars().all():
+                challenge.consumed = True
+            _, salt, digest = _new_verification_code()
+            db.add(VerificationChallenge(
+                user_id=target.id,
+                contact_id=contact.id,
+                code_hash=digest,
+                code_salt=salt,
+                purpose="password_reset",
+                expires_at=utcnow() + timedelta(minutes=10),
+            ))
+            await db.commit()
+    # 无论账号、联系方式是否存在，都返回相同文案，降低枚举风险。
+    return {"status": "accepted", "message": "如果账号存在且联系方式已验证，验证码将进入投递队列"}
+
+
+@router.post("/auth/password-reset/confirm")
+async def confirm_password_reset(
+    payload: PasswordResetConfirm,
+    db: AsyncSession = Depends(get_db),
+):
+    _validate_password(payload.new_password)
+    result = await db.execute(select(User).where(User.username == payload.username.strip()))
+    target = result.scalar_one_or_none()
+    if not target:
+        raise HTTPException(status_code=400, detail="验证码或账号信息不正确")
+    contact_result = await db.execute(select(UserContact).where(
+        UserContact.user_id == target.id,
+        UserContact.contact_type == payload.contact_type,
+        UserContact.verified.is_(True),
+        UserContact.is_primary.is_(True),
+    ))
+    contact = contact_result.scalar_one_or_none()
+    if not contact:
+        raise HTTPException(status_code=400, detail="验证码或账号信息不正确")
+    challenge_result = await db.execute(
+        select(VerificationChallenge)
+        .where(
+            VerificationChallenge.user_id == target.id,
+            VerificationChallenge.contact_id == contact.id,
+            VerificationChallenge.purpose == "password_reset",
+        )
+        .order_by(VerificationChallenge.created_at.desc())
+        .limit(1)
+    )
+    challenge = challenge_result.scalar_one_or_none()
+    if not challenge:
+        raise HTTPException(status_code=400, detail="请先获取验证码")
+    ok, reason = _verify_challenge_code(challenge, payload.code)
+    if not ok:
+        await db.commit()
+        raise HTTPException(status_code=400, detail=reason)
+    await _revoke_user_sessions(db, target.id)
+    target.salt, target.password_hash = _hash_password(payload.new_password)
+    target.token = None
+    await db.commit()
+    return {"status": "ok", "message": "密码已重置，请重新登录"}
 
 
 @router.post("/auth/contacts/{contact_id}/primary")

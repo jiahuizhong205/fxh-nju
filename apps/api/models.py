@@ -426,6 +426,7 @@ class VerificationChallenge(Base):
     contact_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("user_contacts.id", ondelete="CASCADE"))
     code_hash: Mapped[str] = mapped_column(String(128))
     code_salt: Mapped[str] = mapped_column(String(32))
+    purpose: Mapped[str] = mapped_column(String(30), default="contact_verification")
     expires_at: Mapped[datetime] = mapped_column(DateTime)
     attempts: Mapped[int] = mapped_column(default=0)
     max_attempts: Mapped[int] = mapped_column(default=5)

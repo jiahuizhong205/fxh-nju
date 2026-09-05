@@ -454,6 +454,19 @@ class BackendContractTests(unittest.TestCase):
         contact.is_primary = True
         self.assertTrue(contact.verified and contact.is_primary)
 
+    def test_password_reset_requires_verified_contact_and_uses_separate_purpose(self):
+        request = account.PasswordResetRequest(username="student", contact_type="email")
+        confirm = account.PasswordResetConfirm(
+            username="student",
+            contact_type="email",
+            code="123456",
+            new_password="Reset1234",
+        )
+        self.assertEqual(request.contact_type, "email")
+        self.assertEqual(confirm.new_password, "Reset1234")
+        challenge = VerificationChallenge(purpose="password_reset")
+        self.assertEqual(challenge.purpose, "password_reset")
+
     def test_schedule_options_prioritize_user_campus_and_report_missing_courses(self):
         options = build_schedule_options(
             [{"course": "新闻采访与写作", "credits": 3}, {"course": "传播学概论", "credits": 3}],

@@ -87,3 +87,7 @@ async def init_db():
                 "ALTER TABLE sync_records ADD COLUMN IF NOT EXISTS "
                 "retry_count INTEGER NOT NULL DEFAULT 0"
             ))
+            await conn.execute(text(
+                "ALTER TABLE verification_challenges ADD COLUMN IF NOT EXISTS "
+                "purpose VARCHAR(30) NOT NULL DEFAULT 'contact_verification'"
+            ))
