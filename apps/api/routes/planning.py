@@ -490,6 +490,48 @@ def _plan_csv(plan: LearningPlan) -> str:
     return output.getvalue()
 
 
+def _ics_escape(value: object) -> str:
+    return (
+        str(value)
+        .replace("\\", "\\\\")
+        .replace(";", "\\;")
+        .replace(",", "\\,")
+        .replace("\r\n", "\\n")
+        .replace("\n", "\\n")
+        .replace("\r", "\\n")
+    )
+
+
+def _plan_ics(plan: LearningPlan) -> str:
+    """导出可导入日历软件的计划待办项，不伪造具体上课日期。"""
+    stamp = utcnow().strftime("%Y%m%dT%H%M%SZ")
+    lines = [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//Fuxiaohe//StudyPlan//CN",
+        "CALSCALE:GREGORIAN",
+        "METHOD:PUBLISH",
+        f"X-WR-CALNAME:{_ics_escape(plan.program_name)}课程规划",
+    ]
+    for index, item in enumerate(plan.items or [], start=1):
+        description = (
+            f"学期：第{item.get('year', '')}学年{item.get('term', '')}\\n"
+            f"学分：{item.get('credits', '')}\\n"
+            f"校区：{item.get('campus', '')}"
+        )
+        lines.extend([
+            "BEGIN:VTODO",
+            f"UID:{_ics_escape(plan.id)}-{index}@fuxiaohe",
+            f"DTSTAMP:{stamp}",
+            f"SUMMARY:{_ics_escape(item.get('course', '未命名课程'))}",
+            f"DESCRIPTION:{_ics_escape(description)}",
+            "STATUS:NEEDS-ACTION",
+            "END:VTODO",
+        ])
+    lines.extend(["END:VCALENDAR", ""])
+    return "\r\n".join(lines)
+
+
 @router.post("/programs/plan")
 async def save_course_plan(
     payload: SavePlanRequest,
@@ -556,7 +598,7 @@ async def get_saved_plan(
 @router.get("/programs/plans/{plan_id}/export")
 async def export_saved_plan(
     plan_id: uuid.UUID,
-    format: Literal["csv", "json"] = "csv",
+    format: Literal["csv", "json", "ics"] = "csv",
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -569,6 +611,12 @@ async def export_saved_plan(
     if format == "json":
         return {"plan": _saved_plan_dict(plan), "exported_from": str(plan.id)}
     from fastapi.responses import Response
+    if format == "ics":
+        return Response(
+            content=_plan_ics(plan),
+            media_type="text/calendar; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="{plan.program_name}-课程规划.ics"'},
+        )
     return Response(
         content=_plan_csv(plan),
         media_type="text/csv; charset=utf-8",

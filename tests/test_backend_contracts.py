@@ -557,6 +557,22 @@ class BackendContractTests(unittest.TestCase):
         self.assertIn("新闻学", exported)
         self.assertIn("传播学概论", exported)
 
+    def test_saved_plan_ics_export_keeps_traceable_course_tasks(self):
+        plan = LearningPlan(
+            id="00000000-0000-0000-0000-000000000001",
+            program_name="新闻学",
+            items=[{"term": "秋季", "year": 1, "course": "传播学概论", "credits": 3, "campus": "仙林校区"}],
+        )
+
+        exported = planning._plan_ics(plan)
+
+        self.assertIn("BEGIN:VCALENDAR", exported)
+        self.assertIn("BEGIN:VTODO", exported)
+        self.assertIn("UID:00000000-0000-0000-0000-000000000001-1@fuxiaohe", exported)
+        self.assertIn("SUMMARY:传播学概论", exported)
+        self.assertIn("学期：第1学年秋季", exported)
+        self.assertTrue(exported.endswith("END:VCALENDAR\r\n"))
+
     def test_queued_in_app_notification_advances_to_sent_when_due(self):
         notification = Notification(
             channel="in_app",
