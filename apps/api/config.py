@@ -18,7 +18,8 @@ class Settings(BaseSettings):
     rate_limit_window_seconds: int = 60
     max_upload_bytes: int = 10 * 1024 * 1024  # 10 MB
     api_key: str = ""
-    mock_llm: bool = False
+    # 本地 / Docker 默认使用 mock，真实模型必须通过环境变量显式开启。
+    mock_llm: bool = True
 
 
 settings = Settings()

@@ -38,6 +38,7 @@ services:
       DATABASE_URL: postgresql+asyncpg://fuxiaohe:fuxiaohe_dev@postgres:5432/fuxiaohe
       REDIS_URL: redis://redis:6379/0
       EMBEDDING_MODEL: BAAI/bge-small-zh-v1.5
+      MOCK_LLM: ${MOCK_LLM:-true}
       LLM_BASE_URL: ${LLM_BASE_URL:-http://host.docker.internal:11434/v1}
       LLM_MODEL: ${LLM_MODEL:-qwen2.5:7b}
     volumes:

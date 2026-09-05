@@ -68,6 +68,13 @@ class _UpdateNickname(BaseModel):
     nickname: str
 
 
+def _validate_password(password: str) -> None:
+    if not 8 <= len(password) <= 20:
+        raise HTTPException(status_code=400, detail="密码长度须为 8-20 位")
+    if not any(ch.isalpha() for ch in password) or not any(ch.isdigit() for ch in password):
+        raise HTTPException(status_code=400, detail="密码须同时包含字母和数字")
+
+
 # ── 端点 ──────────────────────────────────────────────
 
 @router.post("/auth/register")
@@ -75,8 +82,7 @@ async def register(payload: _Credentials, db: AsyncSession = Depends(get_db)):
     username = payload.username.strip()
     if not username:
         raise HTTPException(status_code=400, detail="用户名不能为空")
-    if len(payload.password) < 6:
-        raise HTTPException(status_code=400, detail="密码至少 6 位")
+    _validate_password(payload.password)
 
     exists = await db.execute(select(User).where(User.username == username))
     if exists.scalar_one_or_none():
@@ -125,12 +131,13 @@ async def change_password(
 ):
     if not _verify_password(payload.old_password, user.salt, user.password_hash):
         raise HTTPException(status_code=400, detail="当前密码错误")
-    if len(payload.new_password) < 6:
-        raise HTTPException(status_code=400, detail="新密码至少 6 位")
+    _validate_password(payload.new_password)
 
     user.salt, user.password_hash = _hash_password(payload.new_password)
+    # 改密后立即使旧 token 失效，避免旧会话继续访问账号数据。
+    user.token = secrets.token_urlsafe(32)
     await db.commit()
-    return {"status": "ok"}
+    return {"status": "ok", "token": user.token}
 
 
 @router.post("/auth/nickname")
