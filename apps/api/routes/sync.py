@@ -37,6 +37,7 @@ SyncScope = Literal[
     "job_favorites",
     "learning_records",
 ]
+SyncConflictStrategy = Literal["remote_wins", "keep_local"]
 ALL_SCOPES: tuple[str, ...] = (
     "profile",
     "recommendation_reports",
@@ -320,6 +321,7 @@ class SyncImportRequest(BaseModel):
     scopes: list[SyncScope] = Field(default_factory=list, max_length=len(ALL_SCOPES))
     request_id: uuid.UUID = Field(default_factory=uuid.uuid4)
     confirm: StrictBool = False
+    conflict_strategy: SyncConflictStrategy = "remote_wins"
 
 
 class SyncProviderRequest(BaseModel):
@@ -387,6 +389,7 @@ async def preview_sync_import(payload: SyncImportRequest):
         "schema_version": payload.snapshot["schema_version"],
         "request_id": str(payload.request_id),
         "scopes": available,
+        "conflict_strategy": payload.conflict_strategy,
         "requires_confirmation": True,
     }
 
@@ -428,6 +431,8 @@ async def import_sync_snapshot(
             profile = result.scalar_one_or_none()
             values = _profile_import_values(raw_scope, profile)
             if values is None:
+                counts[scope]["skipped"] = 1
+            elif profile and payload.conflict_strategy == "keep_local":
                 counts[scope]["skipped"] = 1
             elif profile:
                 for key, value in values.items():
@@ -484,7 +489,9 @@ async def import_sync_snapshot(
                     counts[scope]["skipped"] += 1
                     continue
                 current = existing.get(key)
-                if current:
+                if current and payload.conflict_strategy == "keep_local":
+                    counts[scope]["skipped"] += 1
+                elif current:
                     for field, value in values.items():
                         setattr(current, field, value)
                     current.updated_at = now
@@ -583,7 +590,11 @@ async def import_sync_snapshot(
         updated_records.append(record)
 
     account = payload.snapshot.get("account", {})
-    if isinstance(account, dict) and isinstance(account.get("preferences"), dict):
+    if (
+        payload.conflict_strategy == "remote_wins"
+        and isinstance(account, dict)
+        and isinstance(account.get("preferences"), dict)
+    ):
         user.preferences = account["preferences"]
         if isinstance(account.get("onboarding_completed"), bool):
             user.onboarding_completed = account["onboarding_completed"]
@@ -594,6 +605,7 @@ async def import_sync_snapshot(
     return {
         "status": "synced",
         "request_id": str(payload.request_id),
+        "conflict_strategy": payload.conflict_strategy,
         "counts": counts,
         "records": [_serialize(record) for record in updated_records],
     }

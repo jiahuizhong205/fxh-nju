@@ -1170,6 +1170,12 @@ class BackendContractTests(unittest.TestCase):
         )
         self.assertFalse(sync.SyncImportRequest(snapshot=valid).confirm)
         self.assertTrue(sync.SyncImportRequest(snapshot=valid, confirm=True).confirm)
+        self.assertEqual(
+            sync.SyncImportRequest(snapshot=valid, conflict_strategy="keep_local").conflict_strategy,
+            "keep_local",
+        )
+        with self.assertRaises(ValidationError):
+            sync.SyncImportRequest(snapshot=valid, conflict_strategy="unknown")
 
     def test_sync_import_reuses_profile_schema_validation(self):
         self.assertIsNone(sync._profile_import_values({"major": "新闻学"}))
