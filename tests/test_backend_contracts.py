@@ -466,6 +466,14 @@ class BackendContractTests(unittest.TestCase):
         self.assertEqual(confirm.new_password, "Reset1234")
         challenge = VerificationChallenge(purpose="password_reset")
         self.assertEqual(challenge.purpose, "password_reset")
+        self.assertEqual(
+            account._challenge_purpose_clause("contact_verification").right.value,
+            "contact_verification",
+        )
+        self.assertEqual(
+            account._challenge_purpose_clause("password_reset").right.value,
+            "password_reset",
+        )
 
     def test_schedule_options_prioritize_user_campus_and_report_missing_courses(self):
         options = build_schedule_options(

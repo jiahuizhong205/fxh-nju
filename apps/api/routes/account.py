@@ -131,6 +131,10 @@ def _verify_challenge_code(challenge: VerificationChallenge, code: str, now=None
     return False, "验证码错误"
 
 
+def _challenge_purpose_clause(purpose: str):
+    return VerificationChallenge.purpose == purpose
+
+
 def _serialize_contact(contact: UserContact) -> dict:
     return {
         "id": str(contact.id),
@@ -257,6 +261,7 @@ async def request_contact_verification_code(
             VerificationChallenge.contact_id == contact.id,
             VerificationChallenge.user_id == user.id,
             VerificationChallenge.consumed.is_(False),
+            _challenge_purpose_clause("contact_verification"),
         )
     )
     for challenge in previous.scalars().all():
@@ -305,6 +310,7 @@ async def verify_contact(
         .where(
             VerificationChallenge.contact_id == contact.id,
             VerificationChallenge.user_id == user.id,
+            _challenge_purpose_clause("contact_verification"),
         )
         .order_by(VerificationChallenge.created_at.desc())
         .limit(1)
@@ -358,7 +364,7 @@ async def request_password_reset(
             previous = await db.execute(select(VerificationChallenge).where(
                 VerificationChallenge.user_id == target.id,
                 VerificationChallenge.contact_id == contact.id,
-                VerificationChallenge.purpose == "password_reset",
+                _challenge_purpose_clause("password_reset"),
                 VerificationChallenge.consumed.is_(False),
             ))
             for challenge in previous.scalars().all():
@@ -401,7 +407,7 @@ async def confirm_password_reset(
         .where(
             VerificationChallenge.user_id == target.id,
             VerificationChallenge.contact_id == contact.id,
-            VerificationChallenge.purpose == "password_reset",
+            _challenge_purpose_clause("password_reset"),
         )
         .order_by(VerificationChallenge.created_at.desc())
         .limit(1)
