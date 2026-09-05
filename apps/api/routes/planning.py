@@ -4,6 +4,8 @@
 """
 
 import uuid
+import csv
+import io
 from datetime import datetime
 from typing import Literal
 
@@ -463,6 +465,19 @@ def _saved_plan_dict(plan: LearningPlan) -> dict:
     }
 
 
+def _plan_csv(plan: LearningPlan) -> str:
+    output = io.StringIO(newline="")
+    writer = csv.writer(output, lineterminator="\n")
+    writer.writerow(["计划ID", "专业", "画像版本", "计划状态", "学期", "学年", "课程", "学分", "校区"])
+    for item in plan.items or []:
+        writer.writerow([
+            str(plan.id), plan.program_name, plan.profile_version, plan.status,
+            item.get("term", ""), item.get("year", ""), item.get("course", ""),
+            item.get("credits", ""), item.get("campus", ""),
+        ])
+    return output.getvalue()
+
+
 @router.post("/programs/plan")
 async def save_course_plan(
     payload: SavePlanRequest,
@@ -524,6 +539,29 @@ async def get_saved_plan(
     if not plan:
         raise HTTPException(status_code=404, detail="课程规划不存在")
     return {"plan": _saved_plan_dict(plan)}
+
+
+@router.get("/programs/plans/{plan_id}/export")
+async def export_saved_plan(
+    plan_id: uuid.UUID,
+    format: Literal["csv", "json"] = "csv",
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(LearningPlan).where(LearningPlan.id == plan_id, LearningPlan.user_id == user.id)
+    )
+    plan = result.scalar_one_or_none()
+    if not plan:
+        raise HTTPException(status_code=404, detail="课程规划不存在")
+    if format == "json":
+        return {"plan": _saved_plan_dict(plan), "exported_from": str(plan.id)}
+    from fastapi.responses import Response
+    return Response(
+        content=_plan_csv(plan),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{plan.program_name}-培养计划.csv"'},
+    )
 
 
 @router.patch("/programs/plans/{plan_id}")
