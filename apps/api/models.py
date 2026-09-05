@@ -69,6 +69,25 @@ class PasswordHistory(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
+class SyncRecord(Base):
+    """账号级数据同步检查点。"""
+
+    __tablename__ = "sync_records"
+    __table_args__ = (
+        UniqueConstraint("user_id", "scope", name="uq_sync_records_user_scope"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    scope: Mapped[str] = mapped_column(String(50))
+    version: Mapped[int] = mapped_column(default=0)
+    status: Mapped[str] = mapped_column(String(20), default="pending")  # pending/synced/failed
+    error: Mapped[str] = mapped_column(Text, default="")
+    started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
 class Feedback(Base):
     __tablename__ = "feedback"
 

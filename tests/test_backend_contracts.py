@@ -13,13 +13,14 @@ from fastapi import HTTPException
 from pydantic import ValidationError
 
 from apps.api import config
-from apps.api.models import Feedback, Job, JobApplication, JobFavorite, KnowledgeProgress, LearningActivity, LearningPlan, LearningRecord, PasswordHistory, ProgramEnrollment, RecommendationReport, User, UserContact
+from apps.api.models import Feedback, Job, JobApplication, JobFavorite, KnowledgeProgress, LearningActivity, LearningPlan, LearningRecord, PasswordHistory, ProgramEnrollment, RecommendationReport, SyncRecord, User, UserContact
 from apps.api.routes import account
 from apps.api.routes import auth
 from apps.api.routes import knowledge
 from apps.api.routes import planning
 from apps.api.routes import preferences
 from apps.api.routes import profile
+from apps.api.routes import sync
 from packages.contracts.schemas import ChatRequest
 from services.planning.recommendation_engine import hard_filter
 
@@ -451,6 +452,23 @@ class BackendContractTests(unittest.TestCase):
                 grade="大二",
                 interests=["不存在的兴趣"],
             )
+
+    def test_sync_record_keeps_scope_version_and_status(self):
+        record = SyncRecord(
+            user_id="00000000-0000-0000-0000-000000000001",
+            scope="learning_records",
+            version=3,
+            status="synced",
+        )
+        self.assertEqual(record.scope, "learning_records")
+        self.assertEqual(record.version, 3)
+        self.assertEqual(record.status, "synced")
+
+    def test_sync_request_rejects_unknown_scopes(self):
+        payload = sync.SyncRequest(scopes=["profile", "learning_records"])
+        self.assertEqual(payload.scopes, ["profile", "learning_records"])
+        with self.assertRaises(ValidationError):
+            sync.SyncRequest(scopes=["unknown"])
 
     def test_program_enrollment_keeps_account_and_program_relationship(self):
         enrollment = ProgramEnrollment(
