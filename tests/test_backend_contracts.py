@@ -556,6 +556,18 @@ class BackendContractTests(unittest.TestCase):
         self.assertTrue(pathways)
         self.assertTrue(all(pathway["mode"] == "self_study" for pathway in pathways))
 
+    def test_learning_growth_summary_uses_real_knowledge_activity_and_course_data(self):
+        summary = knowledge._learning_growth_summary(
+            [KnowledgeProgress(progress_percent=100), KnowledgeProgress(progress_percent=50)],
+            [LearningActivity(activity_date=date(2026, 9, 5))],
+            [LearningRecord(status="completed", credits=3)],
+            target_credits=6,
+        )
+        self.assertEqual(summary["knowledge_percent"], 75)
+        self.assertEqual(summary["completed_credits"], 3)
+        self.assertEqual(summary["course_percent"], 50)
+        self.assertEqual(summary["growth_percent"], 43)
+
     def test_profile_schedule_schema_accepts_supported_preferences_only(self):
         payload = profile.ProfileUpdate(
             major="新闻学",

@@ -11,7 +11,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.api.database import get_db
-from apps.api.models import Document, KnowledgeProgress, User, utcnow
+from apps.api.models import Document, KnowledgeProgress, LearningActivity, LearningRecord, User, utcnow
 from apps.api.config import settings
 from apps.api.routes.auth import get_current_user
 from services.rag.ingestion import ingest_document
@@ -32,6 +32,33 @@ class KnowledgeProgressUpdate(BaseModel):
 
 class KnowledgePathwayModeUpdate(BaseModel):
     mode: Literal["campus", "self_study"]
+
+
+def _learning_growth_summary(
+    progress_items: list[KnowledgeProgress],
+    activities: list[LearningActivity],
+    records: list[LearningRecord],
+    target_credits: float = 0,
+) -> dict:
+    knowledge_percent = round(
+        sum(item.progress_percent for item in progress_items) / len(progress_items)
+    ) if progress_items else 0
+    activity_days = len({item.activity_date for item in activities})
+    activity_percent = min(100, round(activity_days / 30 * 100))
+    completed_credits = sum(item.credits for item in records if item.status == "completed")
+    course_percent = min(100, round(completed_credits / target_credits * 100)) if target_credits else 0
+    components = [knowledge_percent, activity_percent]
+    if target_credits:
+        components.append(course_percent)
+    return {
+        "growth_percent": round(sum(components) / len(components)),
+        "knowledge_percent": knowledge_percent,
+        "activity_percent": activity_percent,
+        "course_percent": course_percent,
+        "learning_days": activity_days,
+        "completed_credits": completed_credits,
+        "target_credits": target_credits,
+    }
 
 
 def _extract_upload_text(content: bytes, content_type: str | None, filename: str | None) -> str:
@@ -236,6 +263,29 @@ async def update_knowledge_progress(
         "progress_percent": progress.progress_percent,
         "updated_at": progress.updated_at.isoformat() if progress.updated_at else None,
     }
+
+
+@router.get("/knowledge/progress")
+async def knowledge_progress_summary(
+    target_credits: float = 0,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    progress_result = await db.execute(
+        select(KnowledgeProgress).where(KnowledgeProgress.user_id == user.id)
+    )
+    activity_result = await db.execute(
+        select(LearningActivity).where(LearningActivity.user_id == user.id)
+    )
+    records_result = await db.execute(
+        select(LearningRecord).where(LearningRecord.user_id == user.id)
+    )
+    return _learning_growth_summary(
+        progress_result.scalars().all(),
+        activity_result.scalars().all(),
+        records_result.scalars().all(),
+        target_credits,
+    )
 
 
 @router.post("/knowledge/versions/{version}/activate")
