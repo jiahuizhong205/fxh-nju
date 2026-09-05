@@ -31,6 +31,15 @@ const groups = [
     ],
   },
   {
+    title: '🌿 花园工具',
+    items: [
+      { to: '/settings/learning-progress', label: '我的学习进度', desc: '👀 谁可以逛我的花园' },
+      { to: '/settings/change-password', label: '修改密码', desc: '🔐 换一把花园钥匙' },
+      { to: '/settings/notification', label: '通知设置', desc: '🌸 风铃要响几声？' },
+      { to: '/settings/data-sync', label: '数据同步', desc: '☁️ 种子备份云' },
+    ],
+  },
+  {
     title: '🍀 关于与支持',
     items: [
       { to: '/settings/about', label: '关于福小禾', desc: '📖 物种起源 v2.1.4' },
