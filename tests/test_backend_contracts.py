@@ -564,6 +564,15 @@ class BackendContractTests(unittest.TestCase):
         self.assertIn("user_agent", serialized)
         self.assertNotIn("token_hash", serialized)
 
+    def test_logout_only_clears_current_legacy_token(self):
+        user = User(token="current-token")
+
+        auth._clear_legacy_token(user, "older-session-token")
+        self.assertEqual(user.token, "current-token")
+
+        auth._clear_legacy_token(user, "current-token")
+        self.assertIsNone(user.token)
+
     def test_saved_plan_can_request_schedule_preview_for_selected_classes(self):
         payload = planning.ConflictCheckRequest(teaching_class_ids=["TC-001", "TC-002"])
         self.assertEqual(payload.teaching_class_ids, ["TC-001", "TC-002"])

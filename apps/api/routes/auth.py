@@ -37,6 +37,12 @@ def _hash_session_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
+def _clear_legacy_token(user: User, token: str) -> None:
+    """仅清除当前用户的兼容 token，避免旧会话注销误伤新会话。"""
+    if user.token == token:
+        user.token = None
+
+
 def _session_is_active(session: UserSession, now: datetime | None = None) -> bool:
     now = now or utcnow()
     return session.revoked_at is None and bool(session.expires_at and session.expires_at > now)
@@ -188,7 +194,7 @@ async def logout(
         session = result.scalar_one_or_none()
         if session:
             session.revoked_at = utcnow()
-    user.token = None
+    _clear_legacy_token(user, token)
     await db.commit()
     return {"status": "ok"}
 
