@@ -416,6 +416,12 @@ class BackendContractTests(unittest.TestCase):
         self.assertTrue(account._challenge_request_allowed(now - timedelta(seconds=61), now=now))
         self.assertTrue(account._challenge_request_allowed(None, now=now))
 
+    def test_verification_delivery_retry_uses_backoff_window(self):
+        now = utcnow()
+        self.assertFalse(account._verification_retry_allowed(1, now - timedelta(seconds=30), now=now))
+        self.assertTrue(account._verification_retry_allowed(1, now - timedelta(minutes=2), now=now))
+        self.assertFalse(account._verification_retry_allowed(3, now - timedelta(days=1), now=now))
+
     def test_verification_provider_payload_contains_no_code_hash_or_password_data(self):
         payload = account._verification_provider_payload(
             contact_type="email",

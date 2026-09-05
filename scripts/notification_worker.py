@@ -9,6 +9,7 @@ import logging
 
 from apps.api.config import settings
 from apps.api.database import async_session, init_db
+from apps.api.routes.account import retry_pending_verification_delivery
 from apps.api.routes.notifications import (
     dispatch_external_notifications,
     enqueue_due_learning_reminders,
@@ -22,7 +23,8 @@ async def run_once() -> int:
     async with async_session() as db:
         reminders = await enqueue_due_learning_reminders(db)
         external = await dispatch_external_notifications(db)
-        return reminders + external
+        verification = await retry_pending_verification_delivery(db)
+        return reminders + external + verification
 
 
 async def main() -> None:

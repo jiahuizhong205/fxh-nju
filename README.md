@@ -82,7 +82,7 @@ cd apps/web && npm install && npm run dev
 
 ### 可选：启动通知 worker
 
-通知 worker 负责按账号生成到期学习提醒，并投递已经入队的外部通知。未配置
+通知 worker 负责按账号生成到期学习提醒、重试验证码投递，并投递已经入队的外部通知。未配置
 `NOTIFICATION_PROVIDER_URL` 时不会访问外部网络，外部通知会保持 `queued`，因此
 mock 开发不需要短信、邮件或本地大模型。
 
@@ -92,7 +92,9 @@ PYTHONPATH=. python scripts/notification_worker.py
 
 Docker Compose 已包含同一个 `notification-worker` 服务；如需接入自有 webhook
 供应商，可在 `.env` 中配置 `NOTIFICATION_PROVIDER_URL`、可选的
-`NOTIFICATION_PROVIDER_API_KEY` 和 `NOTIFICATION_WORKER_INTERVAL_SECONDS`。
+`NOTIFICATION_PROVIDER_API_KEY` 和 `NOTIFICATION_WORKER_INTERVAL_SECONDS`。验证码
+投递使用 `VERIFICATION_PROVIDER_URL` 与可选的 `VERIFICATION_PROVIDER_API_KEY`，失败
+后最多按退避规则重试 3 次。
 
 反馈附件默认使用本地文件签名校验和数据库存储。生产环境可配置
 `FEEDBACK_SCAN_URL`（扫描 gateway 接收 multipart 字段 `file`，返回

@@ -4,7 +4,7 @@ import re
 import hashlib
 import secrets
 import uuid
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from typing import Literal
 
 import httpx
@@ -21,6 +21,7 @@ from apps.api.routes.auth import get_current_user
 router = APIRouter()
 
 VERIFICATION_REQUEST_COOLDOWN_SECONDS = 60
+MAX_VERIFICATION_DELIVERY_ATTEMPTS = 3
 
 
 class ContactCreate(BaseModel):
@@ -122,6 +123,18 @@ def _challenge_request_allowed(created_at, now=None) -> bool:
     return (now - created_at).total_seconds() >= VERIFICATION_REQUEST_COOLDOWN_SECONDS
 
 
+def _verification_retry_allowed(attempts: int | None, updated_at, now=None) -> bool:
+    """按投递次数执行指数退避，超过上限不再反复调用供应商。"""
+    attempts = attempts or 0
+    if attempts >= MAX_VERIFICATION_DELIVERY_ATTEMPTS:
+        return False
+    if updated_at is None:
+        return True
+    now = now or utcnow()
+    delay_seconds = 60 * (2 ** max(attempts - 1, 0))
+    return now - updated_at >= timedelta(seconds=delay_seconds)
+
+
 def _verification_provider_payload(
     contact_type: str,
     contact_value: str,
@@ -167,6 +180,48 @@ async def _deliver_verification_code(
     challenge.delivered_at = utcnow()
     challenge.updated_at = utcnow()
     return "sent"
+
+
+async def retry_pending_verification_delivery(
+    db: AsyncSession,
+    now: datetime | None = None,
+    limit: int = 100,
+) -> int:
+    """worker 重试未消费且仍有效的验证码；每次重试都会生成新验证码摘要。"""
+    if not settings.verification_provider_url.strip():
+        return 0
+    now = now or utcnow()
+    result = await db.execute(
+        select(VerificationChallenge)
+        .where(
+            VerificationChallenge.consumed.is_(False),
+            VerificationChallenge.expires_at > now,
+            VerificationChallenge.delivery_status.in_(["queued", "failed"]),
+            VerificationChallenge.delivery_attempts < MAX_VERIFICATION_DELIVERY_ATTEMPTS,
+        )
+        .order_by(VerificationChallenge.created_at)
+        .limit(limit)
+    )
+    processed = 0
+    for challenge in result.scalars().all():
+        if not _verification_retry_allowed(challenge.delivery_attempts, challenge.updated_at, now=now):
+            continue
+        contact = await db.get(UserContact, challenge.contact_id)
+        if not contact:
+            challenge.delivery_status = "failed"
+            challenge.delivery_error = "联系方式不存在"
+            challenge.consumed = True
+            challenge.updated_at = now
+            processed += 1
+            continue
+        code, salt, digest = _new_verification_code()
+        challenge.code_hash = digest
+        challenge.code_salt = salt
+        await _deliver_verification_code(challenge, contact, code)
+        processed += 1
+    if processed:
+        await db.commit()
+    return processed
 
 
 def _verify_challenge_code(challenge: VerificationChallenge, code: str, now=None) -> tuple[bool, str]:
