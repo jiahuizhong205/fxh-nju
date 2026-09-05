@@ -1,17 +1,22 @@
 """用户意见反馈 API。"""
 
+import hashlib
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.api.database import get_db
-from apps.api.models import Feedback, User
+from apps.api.models import Feedback, FeedbackAttachment, User, utcnow
 from apps.api.routes.auth import get_current_user
 
 router = APIRouter()
+
+ATTACHMENT_CONTENT_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif", "application/pdf"}
+ATTACHMENT_MAX_BYTES = 5 * 1024 * 1024
 
 
 class FeedbackCreate(BaseModel):
@@ -19,6 +24,15 @@ class FeedbackCreate(BaseModel):
     content: str = Field(min_length=1, max_length=5000)
     contact: str = Field(default="", max_length=200)
     attachments: list[str] = Field(default_factory=list, max_length=3)
+
+
+def _validate_attachment(content_type: str | None, content: bytes) -> None:
+    if content_type not in ATTACHMENT_CONTENT_TYPES:
+        raise ValueError("附件仅支持 JPG、PNG、WebP、GIF 或 PDF")
+    if not content:
+        raise ValueError("附件文件不能为空")
+    if len(content) > ATTACHMENT_MAX_BYTES:
+        raise ValueError("单个附件不能超过 5 MB")
 
 
 @router.post("/feedback")
@@ -81,3 +95,81 @@ async def get_feedback(
     if not feedback:
         raise HTTPException(status_code=404, detail="反馈不存在")
     return {"feedback": _serialize_feedback(feedback)}
+
+
+@router.post("/feedback/{feedback_id}/attachments")
+async def upload_feedback_attachments(
+    feedback_id: UUID,
+    files: list[UploadFile] = File(...),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    feedback_result = await db.execute(select(Feedback).where(
+        Feedback.id == feedback_id,
+        Feedback.user_id == user.id,
+    ))
+    feedback = feedback_result.scalar_one_or_none()
+    if not feedback:
+        raise HTTPException(status_code=404, detail="反馈不存在")
+    existing = await db.execute(select(FeedbackAttachment).where(
+        FeedbackAttachment.feedback_id == feedback.id,
+    ))
+    existing_attachments = existing.scalars().all()
+    if len(existing_attachments) + len(files) > 3:
+        raise HTTPException(status_code=400, detail="每条反馈最多上传 3 个附件")
+
+    saved = []
+    for file in files:
+        content = await file.read()
+        try:
+            _validate_attachment(file.content_type, content)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        attachment = FeedbackAttachment(
+            feedback_id=feedback.id,
+            filename=(file.filename or "attachment")[:255],
+            content_type=file.content_type,
+            data=content,
+            size_bytes=len(content),
+            sha256=hashlib.sha256(content).hexdigest(),
+        )
+        db.add(attachment)
+        saved.append(attachment)
+        feedback.attachments = [
+            *(feedback.attachments or []),
+            {"id": str(attachment.id), "filename": attachment.filename},
+        ]
+    feedback.updated_at = utcnow()
+    await db.commit()
+    return {
+        "attachments": [{
+            "id": str(item.id),
+            "filename": item.filename,
+            "content_type": item.content_type,
+            "size_bytes": item.size_bytes,
+            "sha256": item.sha256,
+        } for item in saved]
+    }
+
+
+@router.get("/feedback/{feedback_id}/attachments/{attachment_id}")
+async def download_feedback_attachment(
+    feedback_id: UUID,
+    attachment_id: UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    feedback_result = await db.execute(select(Feedback).where(
+        Feedback.id == feedback_id,
+        Feedback.user_id == user.id,
+    ))
+    if not feedback_result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="反馈不存在")
+    attachment = await db.get(FeedbackAttachment, attachment_id)
+    if not attachment or attachment.feedback_id != feedback_id:
+        raise HTTPException(status_code=404, detail="附件不存在")
+    return Response(
+        content=attachment.data,
+        media_type=attachment.content_type,
+        headers={"Content-Disposition": f'attachment; filename="{attachment.filename}"'},
+    )

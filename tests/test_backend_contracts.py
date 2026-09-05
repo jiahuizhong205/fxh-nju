@@ -13,7 +13,7 @@ from fastapi import HTTPException
 from pydantic import ValidationError
 
 from apps.api import config
-from apps.api.models import CacheInvalidation, Feedback, Job, JobApplication, JobFavorite, KnowledgeProgress, LearningActivity, LearningPlan, LearningRecord, Notification, PasswordHistory, ProgramEnrollment, RecommendationReport, SyncRecord, User, UserAccountLink, UserAvatar, UserContact, UserSession, VerificationChallenge, utcnow
+from apps.api.models import CacheInvalidation, Feedback, FeedbackAttachment, Job, JobApplication, JobFavorite, KnowledgeProgress, LearningActivity, LearningPlan, LearningRecord, Notification, PasswordHistory, ProgramEnrollment, RecommendationReport, SyncRecord, User, UserAccountLink, UserAvatar, UserContact, UserSession, VerificationChallenge, utcnow
 from apps.api.routes import account
 from apps.api.routes import auth
 from apps.api.routes import knowledge
@@ -24,6 +24,7 @@ from apps.api.routes import sync
 from apps.api.routes import notifications
 from apps.api.routes import cache
 from apps.api.routes import meta
+from apps.api.routes import feedback
 from packages.contracts.schemas import ChatRequest
 from services.planning.recommendation_engine import hard_filter, recommend
 from services.planning.eligibility import evaluate_program_eligibility
@@ -429,6 +430,20 @@ class BackendContractTests(unittest.TestCase):
             profile._validate_avatar("image/png", b"")
         avatar = UserAvatar(content_type="image/png", data=b"png-bytes", size_bytes=9)
         self.assertEqual(avatar.size_bytes, 9)
+
+    def test_feedback_attachment_validates_upload_and_keeps_digest(self):
+        feedback._validate_attachment("image/png", b"png-bytes")
+        with self.assertRaises(ValueError):
+            feedback._validate_attachment("text/plain", b"not-image")
+        attachment = FeedbackAttachment(
+            filename="screen.png",
+            content_type="image/png",
+            data=b"png-bytes",
+            size_bytes=9,
+            sha256="a" * 64,
+        )
+        self.assertEqual(attachment.filename, "screen.png")
+        self.assertEqual(len(attachment.sha256), 64)
 
     def test_queued_in_app_notification_advances_to_sent_when_due(self):
         notification = Notification(
