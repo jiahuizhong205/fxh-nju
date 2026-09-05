@@ -1,13 +1,21 @@
 <script setup lang="ts">
-import { ref, nextTick, onMounted, watch } from 'vue'
+import { computed, ref, nextTick, onMounted, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { useChatStore } from '../stores/chat'
 import ChatMessage from '../components/ChatMessage.vue'
 import BackButton from '../components/BackButton.vue'
 
 const store = useChatStore()
+const route = useRoute()
 const input = ref('')
 const messagesEl = ref<HTMLElement | null>(null)
 const showSidebar = ref(false)
+const fromTutor = computed(() => route.query.source === 'tutor')
+const pageTitle = computed(() => fromTutor.value ? '伴学问答' : '政策答疑')
+const welcomeTitle = computed(() => fromTutor.value ? '福小禾伴学精灵智能问答 🌱' : '福小禾政策答疑 🌱')
+const welcomeDescription = computed(() => fromTutor.value
+  ? '你好呀！我是你的伴学精灵福小禾，可以帮你理解知识点、梳理学习路线和解答辅修问题。'
+  : '你好呀！我是你的伴学精灵福小禾，可以问我辅修政策、学分要求、证书规则等问题。')
 
 onMounted(() => {
   store.newChat()
@@ -75,15 +83,15 @@ function handleNewChat() {
     <div class="chat-main">
       <header class="chat-head">
         <BackButton fallback="/" />
-        <h2>政策答疑</h2>
+        <h2>{{ pageTitle }}</h2>
         <button class="btn-newchat" @click="handleNewChat">＋ 新对话</button>
         <button class="history-btn" @click="showSidebar = !showSidebar">☰</button>
       </header>
 
       <div ref="messagesEl" class="messages">
         <div v-if="store.messages.length === 0 && !store.streaming" class="welcome">
-          <h2>福小禾伴学精灵智能问答 🌱</h2>
-          <p>你好呀！我是你的伴学精灵福小禾，可以问我辅修政策、学分要求、证书规则等问题。</p>
+          <h2>{{ welcomeTitle }}</h2>
+          <p>{{ welcomeDescription }}</p>
           <div class="quick-questions">
             <button
               v-for="q in ['辅修毕业设计要求', '学分互认政策', '双学位收费标准']"
