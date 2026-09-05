@@ -12,7 +12,8 @@ from fastapi import HTTPException
 from pydantic import ValidationError
 
 from apps.api import config
-from apps.api.models import Job, JobFavorite, User
+from apps.api.models import Job, JobFavorite, LearningRecord, User, UserContact
+from apps.api.routes import account
 from apps.api.routes import auth
 from apps.api.routes import planning
 from apps.api.routes import preferences
@@ -233,6 +234,32 @@ class BackendContractTests(unittest.TestCase):
             asyncio.run(planning.add_job_favorite("missing", user, db))
         self.assertEqual(ctx.exception.status_code, 404)
         self.assertEqual(db.commit_count, 0)
+
+    def test_contact_schema_normalizes_and_masks_supported_values(self):
+        phone = account.ContactCreate(contact_type="phone", value="138 0013-8000")
+        email = account.ContactCreate(contact_type="email", value="Student@nju.edu.cn")
+        self.assertEqual(account._normalize_contact(phone.contact_type, phone.value), "13800138000")
+        self.assertEqual(account._normalize_contact(email.contact_type, email.value), "student@nju.edu.cn")
+        self.assertEqual(account._mask_contact("phone", "13800138000"), "138****8000")
+        self.assertEqual(account._mask_contact("email", "student@nju.edu.cn"), "s*****@nju.edu.cn")
+
+    def test_contact_schema_rejects_invalid_values(self):
+        with self.assertRaises(ValidationError):
+            account.ContactCreate(contact_type="phone", value="12345")
+        with self.assertRaises(ValidationError):
+            account.ContactCreate(contact_type="email", value="not-an-email")
+
+    def test_learning_progress_summary_uses_only_completed_credits(self):
+        records = [
+            LearningRecord(course_name="新闻采访", term="2026春", credits=3, status="completed"),
+            LearningRecord(course_name="新闻编辑", term="2026春", credits=2, status="in_progress"),
+            LearningRecord(course_name="传播学", term="2026秋", credits=4, status="planned"),
+        ]
+        summary = account._summarize_learning_records(records)
+        self.assertEqual(summary["completed_credits"], 3)
+        self.assertEqual(summary["in_progress_credits"], 2)
+        self.assertEqual(summary["planned_credits"], 4)
+        self.assertEqual(summary["total_credits"], 9)
 
 
 if __name__ == "__main__":

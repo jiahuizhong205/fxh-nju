@@ -189,3 +189,41 @@ class JobFavorite(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
     job_id: Mapped[str] = mapped_column(ForeignKey("jobs.id", ondelete="CASCADE"))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class UserContact(Base):
+    """账号联系方式及其验证状态。"""
+
+    __tablename__ = "user_contacts"
+    __table_args__ = (
+        UniqueConstraint("user_id", "contact_type", "value", name="uq_user_contacts_value"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    contact_type: Mapped[str] = mapped_column(String(20))  # phone / email
+    value: Mapped[str] = mapped_column(String(200))
+    verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    is_primary: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class LearningRecord(Base):
+    """账号级课程修读记录，用于学习进度汇总。"""
+
+    __tablename__ = "learning_records"
+    __table_args__ = (
+        UniqueConstraint("user_id", "course_name", "term", name="uq_learning_records_course_term"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    course_name: Mapped[str] = mapped_column(String(200))
+    course_code: Mapped[str] = mapped_column(String(50), default="")
+    term: Mapped[str] = mapped_column(String(30))
+    credits: Mapped[float] = mapped_column(Float)
+    status: Mapped[str] = mapped_column(String(20), default="completed")  # completed/in_progress/planned
+    grade: Mapped[float | None] = mapped_column(Float, nullable=True)
+    source: Mapped[str] = mapped_column(String(50), default="manual")
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
