@@ -49,6 +49,8 @@ services:
       FEEDBACK_SCAN_API_KEY: ${FEEDBACK_SCAN_API_KEY:-}
       FEEDBACK_STORAGE_URL: ${FEEDBACK_STORAGE_URL:-}
       FEEDBACK_STORAGE_API_KEY: ${FEEDBACK_STORAGE_API_KEY:-}
+      SYNC_PROVIDER_URL: ${SYNC_PROVIDER_URL:-}
+      SYNC_PROVIDER_API_KEY: ${SYNC_PROVIDER_API_KEY:-}
     volumes:
       - ../../apps/api:/app/apps/api
       - ../../services:/app/services
@@ -73,6 +75,28 @@ services:
       NOTIFICATION_WORKER_INTERVAL_SECONDS: ${NOTIFICATION_WORKER_INTERVAL_SECONDS:-60}
       VERIFICATION_PROVIDER_URL: ${VERIFICATION_PROVIDER_URL:-}
       VERIFICATION_PROVIDER_API_KEY: ${VERIFICATION_PROVIDER_API_KEY:-}
+    volumes:
+      - ../../apps/api:/app/apps/api
+      - ../../services:/app/services
+      - ../../packages:/app/packages
+      - ../../scripts:/app/scripts
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  sync-worker:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.api
+    command: ["python", "scripts/sync_worker.py"]
+    environment:
+      DATABASE_URL: postgresql+asyncpg://fuxiaohe:fuxiaohe_dev@postgres:5432/fuxiaohe
+      REDIS_URL: redis://redis:6379/0
+      SYNC_PROVIDER_URL: ${SYNC_PROVIDER_URL:-}
+      SYNC_PROVIDER_API_KEY: ${SYNC_PROVIDER_API_KEY:-}
+      SYNC_WORKER_INTERVAL_SECONDS: ${SYNC_WORKER_INTERVAL_SECONDS:-300}
     volumes:
       - ../../apps/api:/app/apps/api
       - ../../services:/app/services

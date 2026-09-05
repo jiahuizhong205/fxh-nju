@@ -1137,6 +1137,45 @@ class BackendContractTests(unittest.TestCase):
         self.assertEqual(values["major"], "新闻学")
         self.assertEqual(values["interests"], ["写作创作"])
 
+    def test_sync_provider_payload_excludes_authentication_secrets(self):
+        user = User(
+            id="00000000-0000-0000-0000-000000000001",
+            username="student",
+            nickname="同学",
+            token="secret-token",
+            password_hash="secret-password-hash",
+            salt="secret-salt",
+        )
+        payload = sync._sync_provider_payload(
+            user,
+            {"schema_version": 1, "account": {}, "scopes": {"profile": None}},
+            {"profile": 2},
+        )
+        self.assertEqual(payload["user_id"], "00000000-0000-0000-0000-000000000001")
+        self.assertEqual(payload["base_versions"], {"profile": 2})
+        self.assertNotIn("token", payload)
+        self.assertNotIn("password_hash", payload)
+
+    def test_sync_provider_without_url_keeps_manual_sync_local(self):
+        previous_url = sync.settings.sync_provider_url
+        sync.settings.sync_provider_url = ""
+        try:
+            result = asyncio.run(
+                sync._push_snapshot_to_provider(
+                    User(id="00000000-0000-0000-0000-000000000001"),
+                    {"schema_version": 1, "account": {}, "scopes": {}},
+                    {},
+                )
+            )
+        finally:
+            sync.settings.sync_provider_url = previous_url
+        self.assertEqual(result["status"], "queued")
+
+    def test_sync_worker_exposes_single_cycle_entrypoint(self):
+        from scripts import sync_worker
+
+        self.assertTrue(callable(sync_worker.run_once))
+
     def test_notification_keeps_delivery_and_read_state(self):
         item = Notification(
             user_id="00000000-0000-0000-0000-000000000001",

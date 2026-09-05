@@ -92,6 +92,18 @@ async def init_db():
                 "retry_count INTEGER NOT NULL DEFAULT 0"
             ))
             await conn.execute(text(
+                "ALTER TABLE sync_records ADD COLUMN IF NOT EXISTS "
+                "provider_status VARCHAR(20) NOT NULL DEFAULT 'disabled'"
+            ))
+            await conn.execute(text(
+                "ALTER TABLE sync_records ADD COLUMN IF NOT EXISTS "
+                "provider_error TEXT NOT NULL DEFAULT ''"
+            ))
+            await conn.execute(text(
+                "ALTER TABLE sync_records ADD COLUMN IF NOT EXISTS "
+                "provider_synced_at TIMESTAMP NULL"
+            ))
+            await conn.execute(text(
                 "ALTER TABLE verification_challenges ADD COLUMN IF NOT EXISTS "
                 "purpose VARCHAR(30) NOT NULL DEFAULT 'contact_verification'"
             ))

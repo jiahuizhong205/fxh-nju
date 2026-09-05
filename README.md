@@ -102,6 +102,12 @@ Docker Compose 已包含同一个 `notification-worker` 服务；如需接入自
 （上传后返回 `{"key": "..."}`，下载时使用同一地址加 key）；两者均可配对应的
 `*_API_KEY`。任一服务不可用时，接口会拒绝本次附件，不会留下半成品记录。
 
+数据同步默认只保留本地快照与检查点。生产环境可配置 `SYNC_PROVIDER_URL` 和可选的
+`SYNC_PROVIDER_API_KEY`，调用 `/api/v1/sync/provider/push` 或启动 Compose 中的
+`sync-worker` 将脱敏快照推送到云端。provider 可在响应中返回另一端快照，服务端会把它
+交给前端继续走“预览/确认导入”，不会未经确认覆盖本地数据；`SYNC_WORKER_INTERVAL_SECONDS`
+控制自动推送周期。
+
 ## 接入真实 LLM / Embedding（可选）
 
 默认 `MOCK_LLM=true`，后端对问答走 mock 回复，且 mock 模式不会加载本地模型，embedding 使用确定性回退向量，**无需任何 LLM 或外部服务** 即可跑通确定性功能（画像、推荐、课程规划、岗位、落库、检索端点、安全策略）。要启用真实智能问答与向量检索，接入一个 OpenAI 兼容服务后改 `.env` 并重启后端：

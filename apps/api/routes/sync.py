@@ -4,12 +4,14 @@ import uuid
 from datetime import datetime
 from typing import Literal
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, StrictBool
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.api.database import get_db
+from apps.api.config import settings
 from apps.api.models import (
     JobFavorite,
     LearningPlan,
@@ -55,6 +57,9 @@ def _serialize(record: SyncRecord) -> dict:
         "error": record.error,
         "request_id": record.last_request_id or None,
         "retry_count": record.retry_count or 0,
+        "provider_status": record.provider_status or "disabled",
+        "provider_error": record.provider_error or "",
+        "provider_synced_at": record.provider_synced_at.isoformat() if record.provider_synced_at else None,
         "started_at": record.started_at.isoformat() if record.started_at else None,
         "completed_at": record.completed_at.isoformat() if record.completed_at else None,
         "updated_at": record.updated_at.isoformat() if record.updated_at else None,
@@ -78,6 +83,71 @@ def _serialize_snapshot(user: User, scopes: dict) -> dict:
 
 def _is_duplicate_request(record: SyncRecord, request_id: uuid.UUID) -> bool:
     return bool(record.last_request_id) and record.last_request_id == str(request_id)
+
+
+def _sync_provider_payload(user: User, snapshot: dict, base_versions: dict[str, int]) -> dict:
+    """构造云端同步 provider payload；不携带 token、密码或验证码。"""
+    return {
+        "user_id": str(user.id),
+        "schema_version": snapshot.get("schema_version", 1),
+        "base_versions": base_versions,
+        "snapshot": snapshot,
+    }
+
+
+async def _push_snapshot_to_provider(
+    user: User,
+    snapshot: dict,
+    base_versions: dict[str, int],
+) -> dict:
+    """向可选云端 provider 推送一份脱敏快照；未配置时安全排队。"""
+    provider_url = settings.sync_provider_url.strip()
+    if not provider_url:
+        return {"status": "queued", "snapshot": None}
+    headers = {"Content-Type": "application/json"}
+    if settings.sync_provider_api_key:
+        headers["Authorization"] = f"Bearer {settings.sync_provider_api_key}"
+    try:
+        async with httpx.AsyncClient(timeout=settings.sync_provider_timeout_seconds) as client:
+            response = await client.post(
+                provider_url,
+                json=_sync_provider_payload(user, snapshot, base_versions),
+                headers=headers,
+            )
+            response.raise_for_status()
+            body = response.json()
+    except Exception as exc:
+        return {"status": "failed", "error": str(exc)[:2000], "snapshot": None}
+    return {
+        "status": "synced",
+        "snapshot": body.get("snapshot") if isinstance(body, dict) else None,
+    }
+
+
+async def push_user_snapshot_to_provider(
+    db: AsyncSession,
+    user: User,
+    scopes: list[str] | None = None,
+) -> dict:
+    """生成并推送账号快照，同时记录各同步范围的 provider 状态。"""
+    requested = scopes or list(ALL_SCOPES)
+    snapshot = await export_sync_snapshot(scopes=requested, user=user, db=db)
+    records = await _load_records(db, user.id)
+    base_versions = {scope: (records[scope].version if scope in records else 0) for scope in requested}
+    result = await _push_snapshot_to_provider(user, snapshot, base_versions)
+    now = utcnow()
+    for scope in requested:
+        record = records.get(scope)
+        if not record:
+            record = SyncRecord(user_id=user.id, scope=scope, version=0)
+            db.add(record)
+            records[scope] = record
+        record.provider_status = result["status"]
+        record.provider_error = result.get("error", "")
+        record.provider_synced_at = now if result["status"] == "synced" else None
+        record.updated_at = now
+    await db.commit()
+    return {"status": result["status"], "scopes": requested, "snapshot": result.get("snapshot"), "error": result.get("error", "")}
 
 
 async def _load_records(db: AsyncSession, user_id) -> dict[str, SyncRecord]:
@@ -191,6 +261,10 @@ class SyncImportRequest(BaseModel):
     scopes: list[SyncScope] = Field(default_factory=list, max_length=len(ALL_SCOPES))
     request_id: uuid.UUID = Field(default_factory=uuid.uuid4)
     confirm: StrictBool = False
+
+
+class SyncProviderRequest(BaseModel):
+    scopes: list[SyncScope] = Field(default_factory=list, max_length=len(ALL_SCOPES))
 
 
 def _validate_snapshot(snapshot: dict) -> tuple[bool, str]:
@@ -456,6 +530,16 @@ async def sync_status(
             for scope in ALL_SCOPES
         ]
     }
+
+
+@router.post("/sync/provider/push")
+async def push_sync_provider(
+    payload: SyncProviderRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """把当前账号脱敏快照推送到可选云端 provider。"""
+    return await push_user_snapshot_to_provider(db, user, payload.scopes or None)
 
 
 @router.post("/sync")

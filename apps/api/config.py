@@ -36,6 +36,11 @@ class Settings(BaseSettings):
     feedback_storage_url: str = ""
     feedback_storage_api_key: str = ""
     feedback_storage_timeout_seconds: float = 10.0
+    # 云端同步 provider 可选；留空时仅使用本地同步接口。
+    sync_provider_url: str = ""
+    sync_provider_api_key: str = ""
+    sync_provider_timeout_seconds: float = 10.0
+    sync_worker_interval_seconds: int = 300
 
 
 settings = Settings()
