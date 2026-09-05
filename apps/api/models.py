@@ -85,6 +85,20 @@ class UserSession(Base):
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
+class UserAccountLink(Base):
+    """已验证的账号关联，供账号切换使用。"""
+
+    __tablename__ = "user_account_links"
+    __table_args__ = (
+        UniqueConstraint("owner_user_id", "linked_user_id", name="uq_user_account_links_pair"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    owner_user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    linked_user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
 class SyncRecord(Base):
     """账号级数据同步检查点。"""
 

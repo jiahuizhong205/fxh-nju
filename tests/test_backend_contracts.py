@@ -13,7 +13,7 @@ from fastapi import HTTPException
 from pydantic import ValidationError
 
 from apps.api import config
-from apps.api.models import CacheInvalidation, Feedback, Job, JobApplication, JobFavorite, KnowledgeProgress, LearningActivity, LearningPlan, LearningRecord, Notification, PasswordHistory, ProgramEnrollment, RecommendationReport, SyncRecord, User, UserContact, UserSession, VerificationChallenge, utcnow
+from apps.api.models import CacheInvalidation, Feedback, Job, JobApplication, JobFavorite, KnowledgeProgress, LearningActivity, LearningPlan, LearningRecord, Notification, PasswordHistory, ProgramEnrollment, RecommendationReport, SyncRecord, User, UserAccountLink, UserContact, UserSession, VerificationChallenge, utcnow
 from apps.api.routes import account
 from apps.api.routes import auth
 from apps.api.routes import knowledge
@@ -411,6 +411,15 @@ class BackendContractTests(unittest.TestCase):
         self.assertEqual(meta.PRODUCT_METADATA["product_name"], "福小禾")
         self.assertEqual(meta.PRODUCT_METADATA["birth_year"], 2026)
         self.assertTrue(any(item["key"] == "planning" for item in meta.PRODUCT_METADATA["features"]))
+
+    def test_account_link_requires_explicit_relation_for_switching(self):
+        current_id = "00000000-0000-0000-0000-000000000001"
+        target_id = "00000000-0000-0000-0000-000000000002"
+        self.assertTrue(auth._can_switch_account(current_id, target_id, {target_id}))
+        self.assertFalse(auth._can_switch_account(current_id, target_id, set()))
+        self.assertFalse(auth._can_switch_account(current_id, current_id, {current_id}))
+        link = UserAccountLink(owner_user_id=current_id, linked_user_id=target_id)
+        self.assertEqual(str(link.linked_user_id), target_id)
 
     def test_queued_in_app_notification_advances_to_sent_when_due(self):
         notification = Notification(

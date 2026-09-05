@@ -15,7 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.api.database import get_db
-from apps.api.models import PasswordHistory, User, UserSession, utcnow
+from apps.api.models import PasswordHistory, User, UserAccountLink, UserSession, utcnow
 
 router = APIRouter()
 
@@ -116,6 +116,15 @@ class _UpdateNickname(BaseModel):
 
 class _OnboardingUpdate(BaseModel):
     completed: bool
+
+
+class AccountLinkRequest(BaseModel):
+    username: str
+    password: str
+
+
+def _can_switch_account(current_user_id, target_user_id, linked_user_ids: set[str]) -> bool:
+    return str(target_user_id) != str(current_user_id) and str(target_user_id) in linked_user_ids
 
 
 def _validate_password(password: str) -> None:
@@ -274,6 +283,108 @@ async def revoke_session(
     session.revoked_at = utcnow()
     await db.commit()
     return {"status": "revoked", "session_id": str(session.id)}
+
+
+def _serialize_account(user: User, current: bool = False) -> dict:
+    return {
+        "id": str(user.id),
+        "username": user.username,
+        "nickname": user.nickname,
+        "onboarding_completed": bool(user.onboarding_completed),
+        "current": current,
+    }
+
+
+@router.get("/auth/accounts")
+async def list_linked_accounts(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(UserAccountLink)
+        .where(UserAccountLink.owner_user_id == user.id)
+        .order_by(UserAccountLink.created_at.desc())
+    )
+    accounts = [_serialize_account(user, current=True)]
+    for link in result.scalars().all():
+        linked = await db.get(User, link.linked_user_id)
+        if linked:
+            accounts.append(_serialize_account(linked))
+    return {"accounts": accounts}
+
+
+@router.post("/auth/accounts/link")
+async def link_account(
+    payload: AccountLinkRequest,
+    request: Request,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(User).where(User.username == payload.username.strip()))
+    target = result.scalar_one_or_none()
+    if not target or not _verify_password(payload.password, target.salt, target.password_hash):
+        raise HTTPException(status_code=401, detail="账号或密码错误")
+    if target.id == user.id:
+        raise HTTPException(status_code=400, detail="不能关联当前账号")
+
+    existing = await db.execute(select(UserAccountLink).where(
+        UserAccountLink.owner_user_id == user.id,
+        UserAccountLink.linked_user_id == target.id,
+    ))
+    if not existing.scalar_one_or_none():
+        db.add(UserAccountLink(owner_user_id=user.id, linked_user_id=target.id))
+    reverse = await db.execute(select(UserAccountLink).where(
+        UserAccountLink.owner_user_id == target.id,
+        UserAccountLink.linked_user_id == user.id,
+    ))
+    if not reverse.scalar_one_or_none():
+        db.add(UserAccountLink(owner_user_id=target.id, linked_user_id=user.id))
+    await db.commit()
+    return {"status": "linked", "account": _serialize_account(target)}
+
+
+@router.post("/auth/accounts/{account_id}/switch")
+async def switch_account(
+    account_id: uuid.UUID,
+    request: Request,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(UserAccountLink).where(
+        UserAccountLink.owner_user_id == user.id,
+        UserAccountLink.linked_user_id == account_id,
+    ))
+    if not result.scalar_one_or_none():
+        raise HTTPException(status_code=403, detail="该账号未关联，不能切换")
+    target = await db.get(User, account_id)
+    if not target:
+        raise HTTPException(status_code=404, detail="账号不存在")
+    target.token = secrets.token_urlsafe(32)
+    db.add(_new_session(target.id, target.token, request))
+    await db.commit()
+    return {"status": "switched", "token": target.token, "user": _serialize_user(target)}
+
+
+@router.delete("/auth/accounts/{account_id}")
+async def unlink_account(
+    account_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(UserAccountLink).where(
+        UserAccountLink.owner_user_id == user.id,
+        UserAccountLink.linked_user_id == account_id,
+    ))
+    link = result.scalar_one_or_none()
+    if not link:
+        raise HTTPException(status_code=404, detail="账号关联不存在")
+    await db.delete(link)
+    reverse_result = await db.execute(select(UserAccountLink).where(
+        UserAccountLink.owner_user_id == account_id,
+        UserAccountLink.linked_user_id == user.id,
+    ))
+    reverse = reverse_result.scalar_one_or_none()
+    if reverse:
+        await db.delete(reverse)
+    await db.commit()
+    return {"status": "unlinked", "account_id": str(account_id)}
 
 
 @router.post("/auth/nickname")
