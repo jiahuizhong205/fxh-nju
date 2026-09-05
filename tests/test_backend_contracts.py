@@ -592,6 +592,14 @@ class BackendContractTests(unittest.TestCase):
         self.assertFalse(notifications._deliver_in_app(notification))
         self.assertEqual(notification.status, "queued")
 
+    def test_notification_preference_defaults_match_notification_page(self):
+        user = User(preferences={})
+        self.assertTrue(notifications._notification_enabled(user, "学习浇水提醒"))
+        self.assertTrue(notifications._notification_enabled(user, "课表冲突预警"))
+        self.assertFalse(notifications._notification_enabled(user, "推荐报告完成"))
+        user.preferences = {"notifications": {"课表冲突预警": False}}
+        self.assertFalse(notifications._notification_enabled(user, "课表冲突预警"))
+
     def test_user_session_uses_digest_and_expiration_for_activity(self):
         token = "opaque-session-token"
         session = auth._new_session("00000000-0000-0000-0000-000000000001", token)

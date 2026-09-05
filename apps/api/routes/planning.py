@@ -355,16 +355,15 @@ async def recommend_programs(
         recommendations=recommendations,
     )
     db.add(report)
-    notifications = (user.preferences or {}).get("notifications", {})
-    if notifications.get("推荐报告完成") is True:
-        from apps.api.routes.notifications import enqueue_notification
-        await enqueue_notification(
-            db,
-            user.id,
-            "recommendation",
-            "推荐报告已生成",
-            "你的辅修推荐报告已准备好，可以查看最新方向和风险提示。",
-        )
+    from apps.api.routes.notifications import enqueue_preference_notification
+    await enqueue_preference_notification(
+        db,
+        user,
+        "推荐报告完成",
+        "recommendation",
+        "推荐报告已生成",
+        "你的辅修推荐报告已准备好，可以查看最新方向和风险提示。",
+    )
     await db.commit()
     await db.refresh(report)
     return {
@@ -724,6 +723,16 @@ async def preview_saved_plan_schedule(
     }
     plan.schedule_analysis = analysis
     plan.updated_at = utcnow()
+    if analysis["conflicts"]:
+        from apps.api.routes.notifications import enqueue_preference_notification
+        await enqueue_preference_notification(
+            db,
+            user,
+            "课表冲突预警",
+            "schedule_conflict",
+            "发现课程时间冲突",
+            f"你的课程规划发现 {len(analysis['conflicts'])} 处时间重叠，请调整教学班或冲突策略。",
+        )
     await db.commit()
     await db.refresh(plan)
     return {"plan": _saved_plan_dict(plan), "analysis": analysis}

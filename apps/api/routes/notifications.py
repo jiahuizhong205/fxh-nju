@@ -14,6 +14,14 @@ from apps.api.routes.auth import get_current_user
 
 router = APIRouter()
 
+DEFAULT_NOTIFICATION_PREFERENCES = {
+    "学习浇水提醒": True,
+    "新岗位开花推送": True,
+    "政策藤蔓更新": True,
+    "推荐报告完成": False,
+    "课表冲突预警": True,
+}
+
 
 class NotificationReadRequest(BaseModel):
     read: StrictBool = True
@@ -47,6 +55,14 @@ def _deliver_in_app(notification: Notification, now: datetime | None = None) -> 
     notification.sent_at = now
     notification.updated_at = now
     return True
+
+
+def _notification_enabled(user: User, key: str) -> bool:
+    """按通知设置页的默认值判断某个事件是否允许入队。"""
+    configured = (user.preferences or {}).get("notifications", {})
+    if key in configured:
+        return bool(configured[key])
+    return DEFAULT_NOTIFICATION_PREFERENCES.get(key, True)
 
 
 async def _deliver_due_in_app(db: AsyncSession, user_id, limit: int = 100) -> int:
@@ -86,6 +102,21 @@ async def enqueue_notification(
     )
     db.add(notification)
     return notification
+
+
+async def enqueue_preference_notification(
+    db: AsyncSession,
+    user: User,
+    preference_key: str,
+    category: str,
+    title: str,
+    body: str,
+    channel: str = "in_app",
+) -> Notification | None:
+    """仅在用户开启对应开关时创建通知，避免事件触发绕过偏好设置。"""
+    if not _notification_enabled(user, preference_key):
+        return None
+    return await enqueue_notification(db, user.id, category, title, body, channel)
 
 
 @router.get("/notifications")
