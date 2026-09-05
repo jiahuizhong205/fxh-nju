@@ -124,6 +124,31 @@ async def _push_snapshot_to_provider(
     }
 
 
+async def _pull_snapshot_from_provider(user: User, scopes: list[str]) -> dict:
+    """从云端 provider 拉取脱敏快照，但永远不在此处自动覆盖本地数据。"""
+    provider_url = settings.sync_provider_url.strip()
+    if not provider_url:
+        return {"status": "queued", "snapshot": None, "requires_confirmation": True}
+    headers = {}
+    if settings.sync_provider_api_key:
+        headers["Authorization"] = f"Bearer {settings.sync_provider_api_key}"
+    try:
+        async with httpx.AsyncClient(timeout=settings.sync_provider_timeout_seconds) as client:
+            response = await client.get(
+                provider_url,
+                params={"user_id": str(user.id), "scopes": ",".join(scopes)},
+                headers=headers,
+            )
+            response.raise_for_status()
+            body = response.json()
+    except Exception as exc:
+        return {"status": "failed", "error": str(exc)[:2000], "snapshot": None, "requires_confirmation": True}
+    snapshot = body.get("snapshot") if isinstance(body, dict) else None
+    if not isinstance(snapshot, dict):
+        return {"status": "failed", "error": "provider 未返回合法快照", "snapshot": None, "requires_confirmation": True}
+    return {"status": "synced", "snapshot": snapshot, "requires_confirmation": True}
+
+
 async def push_user_snapshot_to_provider(
     db: AsyncSession,
     user: User,
@@ -264,6 +289,10 @@ class SyncImportRequest(BaseModel):
 
 
 class SyncProviderRequest(BaseModel):
+    scopes: list[SyncScope] = Field(default_factory=list, max_length=len(ALL_SCOPES))
+
+
+class SyncProviderPullRequest(BaseModel):
     scopes: list[SyncScope] = Field(default_factory=list, max_length=len(ALL_SCOPES))
 
 
@@ -540,6 +569,21 @@ async def push_sync_provider(
 ):
     """把当前账号脱敏快照推送到可选云端 provider。"""
     return await push_user_snapshot_to_provider(db, user, payload.scopes or None)
+
+
+@router.post("/sync/provider/pull")
+async def pull_sync_provider(
+    payload: SyncProviderPullRequest,
+    user: User = Depends(get_current_user),
+):
+    """拉取云端快照供预览；实际合并必须继续调用确认导入接口。"""
+    requested = payload.scopes or list(ALL_SCOPES)
+    result = await _pull_snapshot_from_provider(user, requested)
+    return {
+        **result,
+        "scopes": requested,
+        "merge_endpoint": "/api/v1/sync/import",
+    }
 
 
 @router.post("/sync")

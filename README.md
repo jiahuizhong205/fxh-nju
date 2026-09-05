@@ -108,7 +108,8 @@ Docker Compose 已包含同一个 `notification-worker` 服务；如需接入自
 `SYNC_PROVIDER_API_KEY`，调用 `/api/v1/sync/provider/push` 或启动 Compose 中的
 `sync-worker` 将脱敏快照推送到云端。provider 可在响应中返回另一端快照，服务端会把它
 交给前端继续走“预览/确认导入”，不会未经确认覆盖本地数据；`SYNC_WORKER_INTERVAL_SECONDS`
-控制自动推送周期。
+控制自动推送周期。也可调用 `/api/v1/sync/provider/pull` 主动获取远端快照；正式冲突
+合并仍通过现有 `/api/v1/sync/import` 的确认流程完成。
 
 ## 接入真实 LLM / Embedding（可选）
 

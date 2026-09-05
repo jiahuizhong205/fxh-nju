@@ -1211,6 +1211,64 @@ class BackendContractTests(unittest.TestCase):
             sync.settings.sync_provider_url = previous_url
         self.assertEqual(result["status"], "queued")
 
+    def test_sync_provider_pull_without_url_is_safe_and_requires_no_remote_access(self):
+        previous_url = sync.settings.sync_provider_url
+        sync.settings.sync_provider_url = ""
+        try:
+            result = asyncio.run(
+                sync._pull_snapshot_from_provider(
+                    User(id="00000000-0000-0000-0000-000000000001"),
+                    ["profile"],
+                )
+            )
+        finally:
+            sync.settings.sync_provider_url = previous_url
+        self.assertEqual(result["status"], "queued")
+        self.assertIsNone(result["snapshot"])
+
+    def test_sync_provider_pull_returns_remote_snapshot_for_confirmation(self):
+        previous_url = sync.settings.sync_provider_url
+        sync.settings.sync_provider_url = "https://sync.example.test/account"
+
+        class FakeResponse:
+            def raise_for_status(self):
+                return None
+
+            def json(self):
+                return {
+                    "snapshot": {
+                        "schema_version": 1,
+                        "account": {},
+                        "scopes": {"profile": {"major": "新闻学", "grade": "大二"}},
+                    }
+                }
+
+        class FakeClient:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *_args):
+                return None
+
+            async def get(self, *_args, **_kwargs):
+                return FakeResponse()
+
+        previous_client = sync.httpx.AsyncClient
+        sync.httpx.AsyncClient = lambda **_kwargs: FakeClient()
+        try:
+            result = asyncio.run(
+                sync._pull_snapshot_from_provider(
+                    User(id="00000000-0000-0000-0000-000000000001"),
+                    ["profile"],
+                )
+            )
+        finally:
+            sync.httpx.AsyncClient = previous_client
+            sync.settings.sync_provider_url = previous_url
+        self.assertEqual(result["status"], "synced")
+        self.assertEqual(result["snapshot"]["schema_version"], 1)
+        self.assertTrue(result["requires_confirmation"])
+
     def test_sync_worker_exposes_single_cycle_entrypoint(self):
         from scripts import sync_worker
 
