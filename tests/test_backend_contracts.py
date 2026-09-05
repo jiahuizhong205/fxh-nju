@@ -440,6 +440,18 @@ class BackendContractTests(unittest.TestCase):
                 schedule_preferences={"unknown": True},
             )
 
+    def test_profile_options_are_versioned_and_profile_values_are_whitelisted(self):
+        options = profile.get_profile_options()
+        self.assertEqual(options["version"], 1)
+        self.assertIn("数据分析", options["interests"])
+        self.assertIn("编程基础", options["strengths"])
+        with self.assertRaises(ValidationError):
+            profile.ProfileUpdate(
+                major="新闻学",
+                grade="大二",
+                interests=["不存在的兴趣"],
+            )
+
     def test_program_enrollment_keeps_account_and_program_relationship(self):
         enrollment = ProgramEnrollment(
             user_id="00000000-0000-0000-0000-000000000001",

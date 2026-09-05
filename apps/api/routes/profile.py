@@ -3,7 +3,7 @@
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, ConfigDict, Field, StrictBool
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,6 +12,16 @@ from apps.api.models import RecommendationReport, StudentProfile, User, utcnow
 from apps.api.routes.auth import get_current_user
 
 router = APIRouter()
+
+PROFILE_OPTIONS_VERSION = 1
+INTEREST_OPTIONS = (
+    "数据分析", "写作创作", "商业策划", "人文哲思", "硬核科技", "设计艺术",
+    "写作", "传播", "编程", "设计", "法律", "金融", "人工智能",
+)
+STRENGTH_OPTIONS = (
+    "逻辑推理", "沟通表达", "创意思维", "数据处理", "动手实验", "组织协调",
+    "外语能力", "编程基础", "表达沟通", "其他",
+)
 
 
 class SchedulePreferences(BaseModel):
@@ -49,6 +59,31 @@ class ProfileUpdate(BaseModel):
     credit_budget: int = 0
     certificate_goal: str = ""
     schedule_preferences: SchedulePreferences = Field(default_factory=SchedulePreferences)
+
+    @field_validator("interests")
+    @classmethod
+    def validate_interests(cls, values: list[str]) -> list[str]:
+        invalid = sorted(set(values) - set(INTEREST_OPTIONS))
+        if invalid:
+            raise ValueError(f"兴趣选项不合法: {', '.join(invalid)}")
+        return list(dict.fromkeys(values))
+
+    @field_validator("strengths")
+    @classmethod
+    def validate_strengths(cls, values: list[str]) -> list[str]:
+        invalid = sorted(set(values) - set(STRENGTH_OPTIONS))
+        if invalid:
+            raise ValueError(f"能力选项不合法: {', '.join(invalid)}")
+        return list(dict.fromkeys(values))
+
+
+@router.get("/profile/options")
+def get_profile_options():
+    return {
+        "version": PROFILE_OPTIONS_VERSION,
+        "interests": list(INTEREST_OPTIONS),
+        "strengths": list(STRENGTH_OPTIONS),
+    }
 
 
 @router.get("/profile")
