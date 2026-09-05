@@ -2,6 +2,7 @@
 
 import re
 import uuid
+from datetime import date
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -10,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.api.database import get_db
-from apps.api.models import LearningRecord, User, UserContact, utcnow
+from apps.api.models import LearningActivity, LearningRecord, User, UserContact, utcnow
 from apps.api.routes.auth import get_current_user
 
 router = APIRouter()
@@ -51,6 +52,14 @@ class LearningRecordInput(BaseModel):
         if value not in {"completed", "in_progress", "planned"}:
             raise ValueError("课程状态不合法")
         return value
+
+
+class LearningActivityInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    activity_date: date | None = None
+    minutes: int = Field(gt=0, le=1440)
+    source: str = Field(default="manual", max_length=50)
 
 
 def _normalize_contact(contact_type: str, value: str) -> str:
@@ -105,6 +114,17 @@ def _summarize_learning_records(records: list[LearningRecord]) -> dict:
             summary[key] += record.credits
     summary["total_credits"] = sum(summary.values())
     return summary
+
+
+def _summarize_learning_activities(activities: list[LearningActivity], today: date | None = None) -> dict:
+    today = today or utcnow().date()
+    days = {activity.activity_date for activity in activities if activity.activity_date <= today}
+    streak = 0
+    cursor = today
+    while cursor in days:
+        streak += 1
+        cursor = cursor.fromordinal(cursor.toordinal() - 1)
+    return {"learning_days": len(days), "streak_days": streak}
 
 
 @router.get("/auth/contacts")
@@ -187,9 +207,53 @@ async def learning_progress(user: User = Depends(get_current_user), db: AsyncSes
         .order_by(LearningRecord.updated_at.desc())
     )
     records = result.scalars().all()
+    activity_result = await db.execute(
+        select(LearningActivity).where(LearningActivity.user_id == user.id)
+    )
+    activities = activity_result.scalars().all()
     return {
         **_summarize_learning_records(records),
+        **_summarize_learning_activities(activities),
         "records": [_serialize_learning_record(record) for record in records],
+    }
+
+
+@router.put("/learning/activities")
+async def upsert_learning_activity(
+    payload: LearningActivityInput,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    activity_date = payload.activity_date or utcnow().date()
+    result = await db.execute(
+        select(LearningActivity).where(
+            LearningActivity.user_id == user.id,
+            LearningActivity.activity_date == activity_date,
+        )
+    )
+    activity = result.scalar_one_or_none()
+    if activity:
+        activity.minutes = payload.minutes
+        activity.source = payload.source
+        activity.updated_at = utcnow()
+    else:
+        activity = LearningActivity(
+            user_id=user.id,
+            activity_date=activity_date,
+            minutes=payload.minutes,
+            source=payload.source,
+            updated_at=utcnow(),
+        )
+        db.add(activity)
+    await db.commit()
+    await db.refresh(activity)
+    return {
+        "activity": {
+            "id": str(activity.id),
+            "activity_date": activity.activity_date.isoformat(),
+            "minutes": activity.minutes,
+            "source": activity.source,
+        }
     }
 
 

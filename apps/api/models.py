@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from sqlalchemy import Boolean, Column, String, Text, DateTime, Float, JSON, ForeignKey, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
@@ -313,6 +313,23 @@ class LearningRecord(Base):
     status: Mapped[str] = mapped_column(String(20), default="completed")  # completed/in_progress/planned
     grade: Mapped[float | None] = mapped_column(Float, nullable=True)
     source: Mapped[str] = mapped_column(String(50), default="manual")
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class LearningActivity(Base):
+    """账号级学习活动，用于统计学习天数和连续学习天数。"""
+
+    __tablename__ = "learning_activities"
+    __table_args__ = (
+        UniqueConstraint("user_id", "activity_date", name="uq_learning_activities_user_date"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    activity_date: Mapped[date] = mapped_column()
+    minutes: Mapped[int] = mapped_column(default=0)
+    source: Mapped[str] = mapped_column(String(50), default="manual")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 

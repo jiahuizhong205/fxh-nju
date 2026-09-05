@@ -6,13 +6,14 @@
 
 import asyncio
 import unittest
+from datetime import date
 from pathlib import Path
 
 from fastapi import HTTPException
 from pydantic import ValidationError
 
 from apps.api import config
-from apps.api.models import Feedback, Job, JobApplication, JobFavorite, KnowledgeProgress, LearningPlan, LearningRecord, PasswordHistory, ProgramEnrollment, RecommendationReport, User, UserContact
+from apps.api.models import Feedback, Job, JobApplication, JobFavorite, KnowledgeProgress, LearningActivity, LearningPlan, LearningRecord, PasswordHistory, ProgramEnrollment, RecommendationReport, User, UserContact
 from apps.api.routes import account
 from apps.api.routes import auth
 from apps.api.routes import knowledge
@@ -481,6 +482,25 @@ class BackendContractTests(unittest.TestCase):
         )
         self.assertTrue(result.passed)
         self.assertNotIn("不接受修高数", " ".join(result.reasons))
+
+    def test_learning_activity_keeps_date_and_duration(self):
+        activity = LearningActivity(
+            user_id="00000000-0000-0000-0000-000000000001",
+            activity_date=date(2026, 9, 5),
+            minutes=45,
+            source="manual",
+        )
+        self.assertEqual(activity.activity_date, date(2026, 9, 5))
+        self.assertEqual(activity.minutes, 45)
+
+    def test_learning_activity_summary_counts_days_and_streak(self):
+        activities = [
+            LearningActivity(activity_date=date(2026, 9, 5), minutes=30),
+            LearningActivity(activity_date=date(2026, 9, 4), minutes=20),
+            LearningActivity(activity_date=date(2026, 9, 2), minutes=10),
+        ]
+        summary = account._summarize_learning_activities(activities, today=date(2026, 9, 5))
+        self.assertEqual(summary, {"learning_days": 3, "streak_days": 2})
 
 
 if __name__ == "__main__":
