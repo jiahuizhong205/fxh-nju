@@ -168,6 +168,7 @@ async def list_recommendation_reports(
             {
                 "id": str(report.id),
                 "profile_version": report.profile_version,
+                "is_stale": report.is_stale,
                 "generated_at": report.created_at.isoformat() if report.created_at else None,
                 "recommendation_count": len(report.recommendations or []),
             }
@@ -198,6 +199,7 @@ async def get_recommendation_report(
     return {
         "id": str(report.id),
         "profile_version": report.profile_version,
+        "is_stale": report.is_stale,
         "profile_snapshot": report.profile_snapshot or {},
         "recommendations": report.recommendations or [],
         "generated_at": report.created_at.isoformat() if report.created_at else None,

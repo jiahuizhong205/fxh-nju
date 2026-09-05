@@ -1,0 +1,2 @@
+ALTER TABLE recommendation_reports
+    ADD COLUMN IF NOT EXISTS is_stale BOOLEAN NOT NULL DEFAULT FALSE;

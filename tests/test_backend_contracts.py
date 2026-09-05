@@ -285,6 +285,7 @@ class BackendContractTests(unittest.TestCase):
         self.assertEqual(report.profile_version, 3)
         self.assertEqual(report.profile_snapshot["major"], "新闻学")
         self.assertEqual(report.recommendations[0]["total_score"], 86)
+        self.assertFalse(report.is_stale)
 
     def test_learning_plan_keeps_snapshot_and_adoption_state(self):
         plan = LearningPlan(

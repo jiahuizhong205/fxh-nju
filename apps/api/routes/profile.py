@@ -2,11 +2,11 @@
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.api.database import get_db
-from apps.api.models import StudentProfile, User, utcnow
+from apps.api.models import RecommendationReport, StudentProfile, User, utcnow
 from apps.api.routes.auth import get_current_user
 
 router = APIRouter()
@@ -58,6 +58,14 @@ async def upsert_profile(payload: ProfileUpdate, user: User = Depends(get_curren
             setattr(profile, k, v)
         profile.version += 1
         profile.updated_at = utcnow()
+        await db.execute(
+            update(RecommendationReport)
+            .where(
+                RecommendationReport.user_id == user.id,
+                RecommendationReport.is_stale.is_(False),
+            )
+            .values(is_stale=True)
+        )
     else:
         profile = StudentProfile(**data, user_id=user.id)
         db.add(profile)

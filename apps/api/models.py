@@ -100,6 +100,7 @@ class RecommendationReport(Base):
     profile_version: Mapped[int] = mapped_column(default=0)
     profile_snapshot: Mapped[dict] = mapped_column(JSON, default=dict)
     recommendations: Mapped[list] = mapped_column(JSON, default=list)
+    is_stale: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
