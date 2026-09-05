@@ -405,6 +405,25 @@ class BackendContractTests(unittest.TestCase):
         self.assertEqual(cache._serialize(record, "images")["generation"], 2)
         self.assertEqual(cache._serialize(None, "conversations")["generation"], 0)
 
+    def test_queued_in_app_notification_advances_to_sent_when_due(self):
+        notification = Notification(
+            channel="in_app",
+            status="queued",
+            scheduled_at=utcnow() - timedelta(seconds=1),
+        )
+        self.assertTrue(notifications._deliver_in_app(notification))
+        self.assertEqual(notification.status, "sent")
+        self.assertIsNotNone(notification.sent_at)
+
+    def test_future_or_external_notification_is_not_marked_sent(self):
+        notification = Notification(
+            channel="email",
+            status="queued",
+            scheduled_at=utcnow() - timedelta(seconds=1),
+        )
+        self.assertFalse(notifications._deliver_in_app(notification))
+        self.assertEqual(notification.status, "queued")
+
     def test_learning_progress_summary_uses_only_completed_credits(self):
         records = [
             LearningRecord(course_name="新闻采访", term="2026春", credits=3, status="completed"),

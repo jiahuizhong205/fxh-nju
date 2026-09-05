@@ -1,6 +1,7 @@
 """账号级站内通知 API。"""
 
 import uuid
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, Query, HTTPException
 from pydantic import BaseModel, StrictBool
@@ -35,6 +36,36 @@ def _serialize(notification: Notification) -> dict:
     }
 
 
+def _deliver_in_app(notification: Notification, now: datetime | None = None) -> bool:
+    """推进到期的站内通知；外部渠道不在这里伪造投递成功。"""
+    now = now or utcnow()
+    if notification.channel != "in_app" or notification.status != "queued":
+        return False
+    if notification.scheduled_at and notification.scheduled_at > now:
+        return False
+    notification.status = "sent"
+    notification.sent_at = now
+    notification.updated_at = now
+    return True
+
+
+async def _deliver_due_in_app(db: AsyncSession, user_id, limit: int = 100) -> int:
+    result = await db.execute(
+        select(Notification)
+        .where(
+            Notification.user_id == user_id,
+            Notification.channel == "in_app",
+            Notification.status == "queued",
+        )
+        .order_by(Notification.created_at)
+        .limit(limit)
+    )
+    delivered = sum(1 for item in result.scalars().all() if _deliver_in_app(item))
+    if delivered:
+        await db.commit()
+    return delivered
+
+
 async def enqueue_notification(
     db: AsyncSession,
     user_id,
@@ -64,6 +95,7 @@ async def list_notifications(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    await _deliver_due_in_app(db, user.id)
     query = select(Notification).where(Notification.user_id == user.id)
     if unread_only:
         query = query.where(Notification.read_at.is_(None))
