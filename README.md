@@ -116,6 +116,9 @@ Docker Compose 已包含同一个 `notification-worker` 服务；如需接入自
 
 默认 `MOCK_LLM=true`，后端对问答走 mock 回复，且 mock 模式不会加载本地模型，embedding 使用确定性回退向量，**无需任何 LLM 或外部服务** 即可跑通确定性功能（画像、推荐、课程规划、岗位、落库、检索端点、安全策略）。要启用真实智能问答与向量检索，接入一个 OpenAI 兼容服务后改 `.env` 并重启后端：
 
+Docker 默认不会安装 `sentence-transformers`、torch 或 CUDA；需要使用本地缓存 embedding
+模型时，再额外安装 `requirements.ai.txt`，不会影响 mock 开发路径。
+
 | 变量 | 含义 | 示例（硅基流动） |
 |------|------|------------------|
 | `LLM_BASE_URL` | OpenAI 兼容端点 | `https://api.siliconflow.cn/v1` |

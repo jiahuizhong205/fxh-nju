@@ -68,6 +68,7 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://fuxiaohe:fuxiaohe_dev@postgres:5432/fuxiaohe
       REDIS_URL: redis://redis:6379/0
+      PYTHONPATH: /app
       MOCK_LLM: ${MOCK_LLM:-true}
       NOTIFICATION_PROVIDER_URL: ${NOTIFICATION_PROVIDER_URL:-}
       NOTIFICATION_PROVIDER_API_KEY: ${NOTIFICATION_PROVIDER_API_KEY:-}
@@ -94,6 +95,7 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://fuxiaohe:fuxiaohe_dev@postgres:5432/fuxiaohe
       REDIS_URL: redis://redis:6379/0
+      PYTHONPATH: /app
       SYNC_PROVIDER_URL: ${SYNC_PROVIDER_URL:-}
       SYNC_PROVIDER_API_KEY: ${SYNC_PROVIDER_API_KEY:-}
       SYNC_WORKER_INTERVAL_SECONDS: ${SYNC_WORKER_INTERVAL_SECONDS:-300}
