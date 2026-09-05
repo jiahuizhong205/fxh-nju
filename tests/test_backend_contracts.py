@@ -80,6 +80,11 @@ class BackendContractTests(unittest.TestCase):
         content = compose.read_text(encoding="utf-8")
         self.assertIn("MOCK_LLM: ${MOCK_LLM:-true}", content)
 
+    def test_cors_allows_methods_used_by_account_plan_updates(self):
+        main = Path(__file__).parents[1] / "apps" / "api" / "main.py"
+        content = main.read_text(encoding="utf-8")
+        self.assertIn('allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"]', content)
+
     def test_password_policy_accepts_eight_to_twenty_alphanumeric_password(self):
         for password in ("Abcdef12", "NJU2026ok", "A1" + "x" * 18):
             auth._validate_password(password)
