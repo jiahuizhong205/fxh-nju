@@ -6,6 +6,7 @@
 
 import asyncio
 import unittest
+import uuid
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -694,6 +695,14 @@ class BackendContractTests(unittest.TestCase):
     def test_sync_request_rejects_unknown_scopes(self):
         payload = sync.SyncRequest(scopes=["profile", "learning_records"])
         self.assertEqual(payload.scopes, ["profile", "learning_records"])
+        self.assertIsNotNone(payload.request_id)
+        record = SyncRecord(
+            scope="profile",
+            last_request_id=str(payload.request_id),
+            retry_count=1,
+        )
+        self.assertTrue(sync._is_duplicate_request(record, payload.request_id))
+        self.assertFalse(sync._is_duplicate_request(record, uuid.uuid4()))
         with self.assertRaises(ValidationError):
             sync.SyncRequest(scopes=["unknown"])
 

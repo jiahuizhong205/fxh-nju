@@ -113,6 +113,8 @@ class SyncRecord(Base):
     version: Mapped[int] = mapped_column(default=0)
     status: Mapped[str] = mapped_column(String(20), default="pending")  # pending/synced/failed
     error: Mapped[str] = mapped_column(Text, default="")
+    last_request_id: Mapped[str] = mapped_column(String(64), default="")
+    retry_count: Mapped[int] = mapped_column(default=0)
     started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)

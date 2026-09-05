@@ -79,3 +79,11 @@ async def init_db():
                 "ALTER TABLE learning_plans ADD COLUMN IF NOT EXISTS "
                 "schedule_analysis JSONB NOT NULL DEFAULT '{}'::jsonb"
             ))
+            await conn.execute(text(
+                "ALTER TABLE sync_records ADD COLUMN IF NOT EXISTS "
+                "last_request_id VARCHAR(64) NOT NULL DEFAULT ''"
+            ))
+            await conn.execute(text(
+                "ALTER TABLE sync_records ADD COLUMN IF NOT EXISTS "
+                "retry_count INTEGER NOT NULL DEFAULT 0"
+            ))

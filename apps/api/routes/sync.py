@@ -1,5 +1,6 @@
 """账号数据同步检查点 API。"""
 
+import uuid
 from datetime import datetime
 from typing import Literal
 
@@ -32,6 +33,7 @@ ALL_SCOPES: tuple[str, ...] = (
 
 class SyncRequest(BaseModel):
     scopes: list[SyncScope] = Field(default_factory=list, max_length=len(ALL_SCOPES))
+    request_id: uuid.UUID = Field(default_factory=uuid.uuid4)
 
 
 def _serialize(record: SyncRecord) -> dict:
@@ -40,10 +42,16 @@ def _serialize(record: SyncRecord) -> dict:
         "version": record.version,
         "status": record.status,
         "error": record.error,
+        "request_id": record.last_request_id or None,
+        "retry_count": record.retry_count or 0,
         "started_at": record.started_at.isoformat() if record.started_at else None,
         "completed_at": record.completed_at.isoformat() if record.completed_at else None,
         "updated_at": record.updated_at.isoformat() if record.updated_at else None,
     }
+
+
+def _is_duplicate_request(record: SyncRecord, request_id: uuid.UUID) -> bool:
+    return bool(record.last_request_id) and record.last_request_id == str(request_id)
 
 
 async def _load_records(db: AsyncSession, user_id) -> dict[str, SyncRecord]:
@@ -64,6 +72,8 @@ async def sync_status(
                 "version": 0,
                 "status": "pending",
                 "error": "",
+                "request_id": None,
+                "retry_count": 0,
                 "started_at": None,
                 "completed_at": None,
                 "updated_at": None,
@@ -86,18 +96,23 @@ async def sync_data(
     for scope in scopes:
         record = records.get(scope)
         if record:
-            record.version += 1
-            record.status = "synced"
-            record.error = ""
-            record.started_at = now
-            record.completed_at = now
-            record.updated_at = now
+            if not _is_duplicate_request(record, payload.request_id):
+                record.version += 1
+                record.status = "synced"
+                record.error = ""
+                record.started_at = now
+                record.completed_at = now
+                record.last_request_id = str(payload.request_id)
+                record.retry_count = (record.retry_count or 0) + 1
+                record.updated_at = now
         else:
             record = SyncRecord(
                 user_id=user.id,
                 scope=scope,
                 version=1,
                 status="synced",
+                last_request_id=str(payload.request_id),
+                retry_count=1,
                 started_at=now,
                 completed_at=now,
                 updated_at=now,
