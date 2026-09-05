@@ -13,7 +13,7 @@ from fastapi import HTTPException
 from pydantic import ValidationError
 
 from apps.api import config
-from apps.api.models import CacheInvalidation, Feedback, Job, JobApplication, JobFavorite, KnowledgeProgress, LearningActivity, LearningPlan, LearningRecord, Notification, PasswordHistory, ProgramEnrollment, RecommendationReport, SyncRecord, User, UserContact, VerificationChallenge, utcnow
+from apps.api.models import CacheInvalidation, Feedback, Job, JobApplication, JobFavorite, KnowledgeProgress, LearningActivity, LearningPlan, LearningRecord, Notification, PasswordHistory, ProgramEnrollment, RecommendationReport, SyncRecord, User, UserContact, UserSession, VerificationChallenge, utcnow
 from apps.api.routes import account
 from apps.api.routes import auth
 from apps.api.routes import knowledge
@@ -423,6 +423,26 @@ class BackendContractTests(unittest.TestCase):
         )
         self.assertFalse(notifications._deliver_in_app(notification))
         self.assertEqual(notification.status, "queued")
+
+    def test_user_session_uses_digest_and_expiration_for_activity(self):
+        token = "opaque-session-token"
+        session = auth._new_session("00000000-0000-0000-0000-000000000001", token)
+        self.assertEqual(session.token_hash, auth._hash_session_token(token))
+        self.assertNotEqual(session.token_hash, token)
+        self.assertTrue(auth._session_is_active(session))
+        session.revoked_at = utcnow()
+        self.assertFalse(auth._session_is_active(session))
+
+    def test_user_session_serialization_exposes_metadata_not_token(self):
+        session = UserSession(
+            user_agent="browser",
+            ip_address="127.0.0.1",
+            token_hash="a" * 64,
+            expires_at=utcnow() + timedelta(days=1),
+        )
+        serialized = auth._serialize_session(session)
+        self.assertIn("user_agent", serialized)
+        self.assertNotIn("token_hash", serialized)
 
     def test_learning_progress_summary_uses_only_completed_credits(self):
         records = [
