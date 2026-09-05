@@ -65,6 +65,60 @@ def _notification_enabled(user: User, key: str) -> bool:
     return DEFAULT_NOTIFICATION_PREFERENCES.get(key, True)
 
 
+def _learning_reminder_due(user: User, now: datetime | None = None) -> bool:
+    """判断当前分钟是否应该生成学习提醒。"""
+    now = now or utcnow()
+    preferences = (user.preferences or {}).get("learning_reminder", {})
+    if preferences.get("enabled", True) is not True:
+        return False
+    if preferences.get("time", "09:00") != now.strftime("%H:%M"):
+        return False
+
+    frequency = preferences.get("frequency", "每日浇水")
+    week_days = preferences.get("week_days", []) or []
+    if frequency == "仅工作日" and now.weekday() >= 5:
+        return False
+    if frequency == "隔日浇水" and now.date().toordinal() % 2:
+        return False
+    if frequency == "每周浇水":
+        return now.weekday() in (week_days or [0])
+    if frequency == "自定义":
+        return now.weekday() in week_days
+    return True
+
+
+async def enqueue_due_learning_reminder(
+    db: AsyncSession,
+    user: User,
+    now: datetime | None = None,
+) -> Notification | None:
+    """在通知列表被拉取时补入当天到期的学习提醒，并按自然日去重。"""
+    now = now or utcnow()
+    if not _learning_reminder_due(user, now):
+        return None
+    day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    result = await db.execute(
+        select(Notification)
+        .where(
+            Notification.user_id == user.id,
+            Notification.category == "learning_reminder",
+            Notification.created_at >= day_start,
+        )
+        .order_by(Notification.created_at.desc())
+        .limit(1)
+    )
+    if result.scalar_one_or_none():
+        return None
+    return await enqueue_preference_notification(
+        db,
+        user,
+        "学习浇水提醒",
+        "learning_reminder",
+        "该给学习计划浇水了",
+        "打开你的课程规划，完成今天的一小步学习任务吧。",
+    )
+
+
 async def _deliver_due_in_app(db: AsyncSession, user_id, limit: int = 100) -> int:
     result = await db.execute(
         select(Notification)
@@ -126,6 +180,7 @@ async def list_notifications(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    await enqueue_due_learning_reminder(db, user)
     await _deliver_due_in_app(db, user.id)
     query = select(Notification).where(Notification.user_id == user.id)
     if unread_only:

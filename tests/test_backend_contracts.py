@@ -7,7 +7,7 @@
 import asyncio
 import unittest
 import uuid
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -605,6 +605,20 @@ class BackendContractTests(unittest.TestCase):
         self.assertFalse(notifications._notification_enabled(user, "推荐报告完成"))
         user.preferences = {"notifications": {"课表冲突预警": False}}
         self.assertFalse(notifications._notification_enabled(user, "课表冲突预警"))
+
+    def test_learning_reminder_due_respects_time_frequency_and_weekdays(self):
+        monday_morning = datetime(2026, 9, 7, 9, 0)
+        user = User(preferences={})
+        self.assertTrue(notifications._learning_reminder_due(user, monday_morning))
+
+        user.preferences = {"learning_reminder": {"enabled": False}}
+        self.assertFalse(notifications._learning_reminder_due(user, monday_morning))
+        user.preferences = {"learning_reminder": {"time": "18:00"}}
+        self.assertFalse(notifications._learning_reminder_due(user, monday_morning))
+        user.preferences = {"learning_reminder": {"frequency": "自定义", "week_days": [2]}}
+        self.assertFalse(notifications._learning_reminder_due(user, monday_morning))
+        user.preferences = {"learning_reminder": {"frequency": "自定义", "week_days": [0]}}
+        self.assertTrue(notifications._learning_reminder_due(user, monday_morning))
 
     def test_user_session_uses_digest_and_expiration_for_activity(self):
         token = "opaque-session-token"
