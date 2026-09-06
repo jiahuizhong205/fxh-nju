@@ -2,7 +2,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import Icon from '../components/Icon.vue'
-import { fetchJobs, getFavoriteJobIds, saveFavoriteJobIds, type Job } from '../api/client'
+import { addFavoriteJob, fetchFavoriteJobIds, fetchJobs, removeFavoriteJob, type Job } from '../api/client'
 import BackButton from '../components/BackButton.vue'
 
 const router = useRouter()
@@ -35,9 +35,10 @@ const displayJobs = computed(() => [...filteredJobs.value].sort((a, b) => {
 }))
 
 onMounted(async () => {
-  favIds.value = getFavoriteJobIds()
   try {
-    jobs.value = await fetchJobs()
+    const [loadedJobs, loadedFavorites] = await Promise.all([fetchJobs(), fetchFavoriteJobIds()])
+    jobs.value = loadedJobs
+    favIds.value = loadedFavorites
   } catch (e) {
     error.value = e instanceof Error ? e.message : '岗位加载失败，请稍后重试。'
   }
@@ -51,11 +52,19 @@ function isFav(id: string) {
   return favIds.value.includes(id)
 }
 
-function toggleFav(id: string) {
+async function toggleFav(id: string) {
+  const wasFavorited = isFav(id)
   const i = favIds.value.indexOf(id)
   if (i >= 0) favIds.value.splice(i, 1)
   else favIds.value.push(id)
-  saveFavoriteJobIds(favIds.value)
+  try {
+    if (wasFavorited) await removeFavoriteJob(id)
+    else await addFavoriteJob(id)
+  } catch (e) {
+    if (wasFavorited) favIds.value.push(id)
+    else favIds.value = favIds.value.filter(jobId => jobId !== id)
+    error.value = e instanceof Error ? e.message : '收藏状态保存失败，请稍后重试。'
+  }
 }
 
 function jobTags(j: Job): string[] {

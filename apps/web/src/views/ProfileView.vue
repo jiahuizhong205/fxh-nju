@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { fetchProfile, getFavoriteJobIds, logout, type StudentProfile } from '../api/client'
+import { fetchFavoriteJobIds, fetchLearningProgress, fetchProfile, logout, type LearningProgress, type StudentProfile } from '../api/client'
 import { useAuthStore } from '../stores/auth'
 import { useAvatarStore } from '../stores/avatar'
 import BackButton from '../components/BackButton.vue'
@@ -10,6 +10,7 @@ const router = useRouter()
 const auth = useAuthStore()
 const avatarStore = useAvatarStore()
 const profile = ref<StudentProfile | null>(null)
+const progress = ref<LearningProgress | null>(null)
 const loading = ref(true)
 const favoriteCount = ref(0)
 
@@ -17,10 +18,14 @@ const displayName = computed(() => auth.user?.nickname || auth.user?.username ||
 const profileSummary = computed(() => profile.value ? `${profile.value.major} · ${profile.value.grade}` : '完善画像后解锁更多成长记录')
 const interestsSummary = computed(() => profile.value?.interests?.slice(0, 3).join(' · ') || '尚未填写兴趣方向')
 
-// 学习进度接口尚未接入，先保留 Figma 中的前端展示占位。
-const harvestedCredits = 28
-const totalCredits = 50
-const completionPercent = Math.round((harvestedCredits / totalCredits) * 100)
+const harvestedCredits = computed(() => progress.value?.completed_credits ?? 0)
+const totalCredits = computed(() => progress.value?.target_credits ?? 0)
+const completionPercent = computed(() => progress.value?.completion_percent ?? 0)
+const currentMinor = computed(() => progress.value?.plan_program || '尚未采用辅修方案')
+const learningSummary = computed(() => {
+  if (!progress.value?.learning_days) return '还没有学习记录，完成一次学习后会在这里生长 🌻'
+  return `已记录 ${progress.value.learning_days} 天学习 · 连续 ${progress.value.streak_days} 天 🌻`
+})
 
 async function handleLogout() {
   try { await logout() } catch { /* token 已失效也照常退出 */ }
@@ -31,9 +36,15 @@ async function handleLogout() {
 
 onMounted(async () => {
   try {
-    const [loadedProfile] = await Promise.all([fetchProfile(), avatarStore.load()])
+    const [loadedProfile, loadedProgress, loadedFavorites] = await Promise.all([
+      fetchProfile(),
+      fetchLearningProgress(),
+      fetchFavoriteJobIds(),
+      avatarStore.load(),
+    ])
     profile.value = loadedProfile
-    favoriteCount.value = getFavoriteJobIds().length
+    progress.value = loadedProgress
+    favoriteCount.value = loadedFavorites.length
   } catch {
     profile.value = null
   } finally {
@@ -52,7 +63,7 @@ onMounted(async () => {
       <img class="avatar" :src="avatarStore.avatarUrl" alt="头像" />
       <h1>{{ displayName }} <span class="star">⭐</span></h1>
       <p class="major">{{ profileSummary }}</p>
-      <p class="streak">你已经浇灌了 120 天的复合学习 🌻</p>
+      <p class="streak">{{ learningSummary }}</p>
     </header>
 
     <section class="garden-card">
@@ -62,7 +73,7 @@ onMounted(async () => {
         <span class="row-icon">🌳</span>
         <span class="row-main">
           <span class="row-label">当前辅修专业</span>
-          <strong>{{ profile?.major || '还没有选择专业' }}</strong>
+          <strong>{{ currentMinor }}</strong>
           <span class="row-detail">{{ interestsSummary }}</span>
         </span>
         <span class="chevron">›</span>
@@ -72,7 +83,7 @@ onMounted(async () => {
         <span class="row-icon">🍒</span>
         <span class="row-main">
           <span class="row-label">已修学分进度</span>
-          <strong>已收获 {{ harvestedCredits }}/{{ totalCredits }} 颗果实</strong>
+          <strong>{{ totalCredits ? `已收获 ${harvestedCredits}/${totalCredits} 颗果实` : `已完成 ${harvestedCredits} 学分` }}</strong>
         </span>
         <strong class="percent">{{ completionPercent }}%</strong>
         <span class="progress-track"><span :style="{ width: `${completionPercent}%` }" /></span>

@@ -105,7 +105,7 @@ onMounted(async () => {
         <p class="rec-desc">{{ rec ? `${rec.program.discipline} · ${rec.program.core_courses.slice(0, 3).join('、')}` : '先填写画像，让福小禾为你推荐最适合复合生长的方向。' }}</p>
         <div class="rec-divider"></div>
         <div class="rec-foot">
-          <span class="rec-count">{{ rec ? `已有 234 名种子同学加入该方向 · 需修 ${rec.program.total_credits} 学分` : '完善画像后查看方向热度' }}</span>
+          <span class="rec-count">{{ rec ? `已有 ${rec.program.participant_count} 名种子同学加入该方向 · 需修 ${rec.program.total_credits} 学分` : '完善画像后查看方向热度' }}</span>
           <span class="rec-go">去瞧瞧 <b>›</b></span>
         </div>
       </div>

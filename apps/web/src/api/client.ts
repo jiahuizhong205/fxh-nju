@@ -169,6 +169,8 @@ export interface Program {
   required_math_level: string
   semesters_needed: number
   discipline: string
+  course_count: number
+  participant_count: number
   has_plan?: boolean
 }
 
@@ -207,6 +209,19 @@ export interface Job {
   skills_preferred: string[]
   deadline: string
   source: string
+}
+
+export interface LearningProgress {
+  completed_credits: number
+  in_progress_credits: number
+  planned_credits: number
+  total_credits: number
+  learning_days: number
+  streak_days: number
+  target_credits: number
+  completion_percent: number
+  plan_program: string | null
+  records: Array<Record<string, unknown>>
 }
 
 export async function fetchProfile(): Promise<StudentProfile | null> {
@@ -305,6 +320,33 @@ export async function fetchJob(id: string): Promise<Job> {
   return data.job
 }
 
+export async function fetchLearningProgress(): Promise<LearningProgress> {
+  const res = await fetch(`${BASE}/learning/progress`, { headers: authHeaders() })
+  return jsonResponse<LearningProgress>(res, '学习进度加载失败')
+}
+
+export async function fetchFavoriteJobIds(): Promise<string[]> {
+  const res = await fetch(`${BASE}/favorites/jobs`, { headers: authHeaders() })
+  const data = await jsonResponse<{ job_ids: string[] }>(res, '岗位收藏加载失败')
+  return data.job_ids ?? []
+}
+
+export async function addFavoriteJob(id: string): Promise<void> {
+  const res = await fetch(`${BASE}/favorites/jobs/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    headers: authHeaders(),
+  })
+  await jsonResponse(res, '岗位收藏失败')
+}
+
+export async function removeFavoriteJob(id: string): Promise<void> {
+  const res = await fetch(`${BASE}/favorites/jobs/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  })
+  await jsonResponse(res, '取消收藏失败')
+}
+
 export type UserPreferences = Record<string, unknown>
 
 export async function fetchPreferences(): Promise<UserPreferences> {
@@ -335,21 +377,6 @@ export async function submitFeedback(payload: {
     body: JSON.stringify(payload),
   })
   return jsonResponse<{ id: string; status: string }>(res, '反馈提交失败')
-}
-
-const FAVORITE_JOBS_KEY = 'fxh_favorite_jobs'
-
-export function getFavoriteJobIds(): string[] {
-  try {
-    const value = JSON.parse(localStorage.getItem(FAVORITE_JOBS_KEY) || '[]')
-    return Array.isArray(value) ? value.filter((id): id is string => typeof id === 'string') : []
-  } catch {
-    return []
-  }
-}
-
-export function saveFavoriteJobIds(ids: string[]) {
-  localStorage.setItem(FAVORITE_JOBS_KEY, JSON.stringify([...new Set(ids)]))
 }
 
 export interface SearchResult {

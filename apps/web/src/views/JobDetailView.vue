@@ -2,7 +2,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import Icon from '../components/Icon.vue'
-import { fetchJob, getFavoriteJobIds, saveFavoriteJobIds, type Job } from '../api/client'
+import { addFavoriteJob, fetchFavoriteJobIds, fetchJob, removeFavoriteJob, type Job } from '../api/client'
 import BackButton from '../components/BackButton.vue'
 
 const route = useRoute()
@@ -15,19 +15,28 @@ const expired = computed(() => Boolean(job.value?.deadline && job.value.deadline
 
 onMounted(async () => {
   try {
-    job.value = await fetchJob(route.params.id as string)
-    favorited.value = getFavoriteJobIds().includes(job.value.id)
+    const [loadedJob, favoriteIds] = await Promise.all([
+      fetchJob(route.params.id as string),
+      fetchFavoriteJobIds(),
+    ])
+    job.value = loadedJob
+    favorited.value = favoriteIds.includes(loadedJob.id)
   } catch (e) {
     error.value = e instanceof Error ? e.message : '岗位详情加载失败，请稍后重试。'
   }
 })
 
-function toggleFavorite() {
+async function toggleFavorite() {
   if (!job.value) return
-  favorited.value = !favorited.value
-  const ids = getFavoriteJobIds().filter(id => id !== job.value?.id)
-  if (favorited.value) ids.push(job.value.id)
-  saveFavoriteJobIds(ids)
+  const wasFavorited = favorited.value
+  favorited.value = !wasFavorited
+  try {
+    if (wasFavorited) await removeFavoriteJob(job.value.id)
+    else await addFavoriteJob(job.value.id)
+  } catch (e) {
+    favorited.value = wasFavorited
+    error.value = e instanceof Error ? e.message : '收藏状态保存失败，请稍后重试。'
+  }
 }
 </script>
 
