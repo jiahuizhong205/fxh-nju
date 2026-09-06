@@ -14,6 +14,7 @@ class LlmProviderConfigTests(unittest.TestCase):
         self.assertEqual(configured.llm_base_url, "")
         self.assertEqual(configured.embedding_base_url, "")
         self.assertEqual(configured.embedding_api_key, "")
+        self.assertEqual(configured.embedding_api_dimensions, 0)
         self.assertEqual(configured.embedding_dimension, 384)
 
     def test_embedding_api_uses_its_own_endpoint_key_and_dimension(self):
@@ -26,6 +27,7 @@ class LlmProviderConfigTests(unittest.TestCase):
             patch.object(retrieval.settings, "embedding_base_url", "https://embedding.example/v1/"),
             patch.object(retrieval.settings, "embedding_api_key", "embedding-secret"),
             patch.object(retrieval.settings, "embedding_api_model", "embedding-model"),
+            patch.object(retrieval.settings, "embedding_api_dimensions", 384),
             patch.object(retrieval.settings, "embedding_dimension", 384),
             patch("services.rag.retrieval.httpx.post", return_value=response) as post,
         ):
@@ -34,6 +36,25 @@ class LlmProviderConfigTests(unittest.TestCase):
         self.assertEqual(len(vector), 384)
         self.assertEqual(post.call_args.args[0], "https://embedding.example/v1/embeddings")
         self.assertEqual(post.call_args.kwargs["headers"]["Authorization"], "Bearer embedding-secret")
+        self.assertEqual(post.call_args.kwargs["json"]["dimensions"], 384)
+
+    def test_embedding_api_omits_optional_dimensions_for_generic_providers(self):
+        from services.rag import retrieval
+
+        response = Mock()
+        response.raise_for_status.return_value = None
+        response.json.return_value = {"data": [{"embedding": [0.25] * 384}]}
+        with (
+            patch.object(retrieval.settings, "embedding_base_url", "https://embedding.example/v1"),
+            patch.object(retrieval.settings, "embedding_api_key", "embedding-secret"),
+            patch.object(retrieval.settings, "embedding_api_model", "embedding-model"),
+            patch.object(retrieval.settings, "embedding_api_dimensions", 0),
+            patch.object(retrieval.settings, "embedding_dimension", 384),
+            patch("services.rag.retrieval.httpx.post", return_value=response) as post,
+        ):
+            retrieval._embed_via_api("测试")
+
+        self.assertNotIn("dimensions", post.call_args.kwargs["json"])
 
     def test_embedding_dimension_mismatch_fails_instead_of_silently_hashing(self):
         from services.rag import retrieval
@@ -55,6 +76,7 @@ class LlmProviderConfigTests(unittest.TestCase):
         compose = (self.ROOT / "infra/compose/docker-compose.yml").read_text(encoding="utf-8")
         env_example = (self.ROOT / ".env.example").read_text(encoding="utf-8")
         reindex = self.ROOT / "scripts/reembed_documents.py"
+        preflight = self.ROOT / "scripts/check_external_llm.py"
         dockerignore = (self.ROOT / ".dockerignore").read_text(encoding="utf-8")
 
         self.assertIn('@app.get("/api/readiness")', main)
@@ -62,6 +84,8 @@ class LlmProviderConfigTests(unittest.TestCase):
         self.assertIn("LLM_API_KEY", compose)
         self.assertIn("EMBEDDING_API_KEY=", env_example)
         self.assertTrue(reindex.exists())
+        self.assertTrue(preflight.exists())
+        self.assertIn("embedding 连通性检查", preflight.read_text(encoding="utf-8"))
         self.assertIn(".env", dockerignore.splitlines())
 
     def test_agents_are_scoped_to_authenticated_user_and_database_data(self):

@@ -25,16 +25,22 @@ def _placeholder_embedding(text: str) -> list[float]:
 def embedding_signature() -> str:
     if settings.mock_llm:
         return "mock-hash:384"
-    return f"api:{settings.embedding_api_model}:{settings.embedding_dimension}"
+    return (
+        f"api:{settings.embedding_api_model}:{settings.embedding_dimension}"
+        f":request-{settings.embedding_api_dimensions or 'provider-default'}"
+    )
 
 
 def _embed_via_api(text: str) -> list[float]:
     """调用独立配置的 OpenAI 兼容 embedding API。"""
     if not settings.embedding_base_url or not settings.embedding_api_key:
         raise RuntimeError("真实向量服务尚未配置")
+    payload = {"model": settings.embedding_api_model, "input": text}
+    if settings.embedding_api_dimensions:
+        payload["dimensions"] = settings.embedding_api_dimensions
     resp = httpx.post(
         f"{settings.embedding_base_url.rstrip('/')}/embeddings",
-        json={"model": settings.embedding_api_model, "input": text},
+        json=payload,
         headers={"Authorization": f"Bearer {settings.embedding_api_key}"},
         timeout=settings.embedding_api_timeout_seconds,
     )

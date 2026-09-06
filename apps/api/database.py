@@ -21,5 +21,9 @@ async def get_db() -> AsyncSession:
 
 async def init_db():
     async with engine.begin() as conn:
+        # 新部署不依赖 Docker 初始化目录；先保证 pgvector 类型存在再建表。
+        if conn.dialect.name == "postgresql":
+            await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+            await conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
         await conn.run_sync(Base.metadata.create_all)
         await apply_migrations(conn)

@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     embedding_base_url: str = ""
     embedding_api_key: str = ""
     embedding_api_timeout_seconds: float = 15.0
+    # 0 表示不向 provider 传递 OpenAI 的 dimensions 参数；当前数据库仍固定存储 384 维。
+    embedding_api_dimensions: int = 0
     embedding_dimension: int = 384
     llm_base_url: str = ""
     llm_model: str = ""
