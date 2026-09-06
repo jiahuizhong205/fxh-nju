@@ -136,7 +136,7 @@ class BackendContractTests(unittest.TestCase):
             first = retrieval.embed_text("同一段文字")
             second = retrieval.embed_text("同一段文字")
         self.assertEqual(first, second)
-        self.assertEqual(len(first), 384)
+        self.assertEqual(len(first), 1024)
 
     def test_password_policy_rejects_short_long_or_missing_character_class(self):
         invalid_passwords = (

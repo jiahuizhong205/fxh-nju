@@ -38,7 +38,7 @@ class DocumentChunk(Base):
     document_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("documents.id", ondelete="CASCADE"))
     chunk_index: Mapped[int] = mapped_column()
     content: Mapped[str] = mapped_column(Text)
-    embedding = mapped_column(Vector(384))  # bge-small-zh
+    embedding = mapped_column(Vector(1024))  # text-embedding-v4 / qwen3 embedding
     metadata_: Mapped[dict] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 

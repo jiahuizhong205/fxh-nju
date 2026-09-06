@@ -7,6 +7,7 @@ class ProductionDeploymentConfigTests(unittest.TestCase):
 
     def test_production_compose_uses_private_services_and_static_web(self) -> None:
         compose = (self.ROOT / "infra/compose/docker-compose.prod.yml").read_text(encoding="utf-8")
+        development_compose = (self.ROOT / "infra/compose/docker-compose.yml").read_text(encoding="utf-8")
 
         self.assertIn("Dockerfile.web.prod", compose)
         self.assertIn("PYTHONPATH: /app", compose)
@@ -14,6 +15,8 @@ class ProductionDeploymentConfigTests(unittest.TestCase):
         self.assertNotIn('"5432:5432"', compose)
         self.assertNotIn('"6379:6379"', compose)
         self.assertIn("condition: service_healthy", compose)
+        self.assertIn("../../scripts:/app/scripts", development_compose)
+        self.assertIn("../../infra/migrations:/app/infra/migrations", development_compose)
 
     def test_production_web_preserves_sse_and_spa_routing(self) -> None:
         nginx = (self.ROOT / "infra/nginx/fuxiaohe.conf").read_text(encoding="utf-8")
@@ -27,6 +30,8 @@ class ProductionDeploymentConfigTests(unittest.TestCase):
 
         self.assertIn("CREATE EXTENSION IF NOT EXISTS vector", database)
         self.assertIn("CREATE EXTENSION IF NOT EXISTS pg_trgm", database)
+        migration = (self.ROOT / "infra/migrations/042_embedding_dimension_1024.sql").read_text(encoding="utf-8")
+        self.assertIn("vector(1024)", migration)
 
     def test_production_secret_template_is_not_trackable_as_runtime_env(self) -> None:
         gitignore = (self.ROOT / ".gitignore").read_text(encoding="utf-8")

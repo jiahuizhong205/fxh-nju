@@ -10,7 +10,7 @@ class MigrationContractTests(unittest.TestCase):
         files = migrations.discover_migrations()
 
         self.assertEqual(files[0].name, "001_init.sql")
-        self.assertEqual(files[-1].name, "041_job_provenance.sql")
+        self.assertEqual(files[-1].name, "042_embedding_dimension_1024.sql")
         self.assertEqual(len(files), len({path.name for path in files}))
         self.assertEqual(
             [path.name for path in files],

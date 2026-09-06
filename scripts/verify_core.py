@@ -108,7 +108,7 @@ def test_mock_embedding_without_local_model():
     with patch.object(retrieval.settings, "mock_llm", True):
         first = retrieval.embed_text("同一段文字")
         second = retrieval.embed_text("同一段文字")
-    assert first == second and len(first) == 384
+    assert first == second and len(first) == 1024
     print("  PASS test_mock_embedding_without_local_model")
 
 

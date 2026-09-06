@@ -123,10 +123,10 @@ Docker Compose 已包含同一个 `notification-worker` 服务；如需接入自
 | `MOCK_LLM` | 开启真实模式 | `false` |
 | `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` | 聊天 API 地址、密钥、模型名 | 使用供应商给出的 OpenAI 兼容值 |
 | `EMBEDDING_BASE_URL` / `EMBEDDING_API_KEY` / `EMBEDDING_API_MODEL` | 向量 API 地址、密钥、模型名 | 可与聊天 API 独立 |
-| `EMBEDDING_DIMENSION` | 数据库向量长度 | 固定为 `384`，不可随意修改 |
-| `EMBEDDING_API_DIMENSIONS` | 可选地传给兼容 API 的 `dimensions` 参数 | 供应商支持降维时填写 `384`；不支持则填 `0` 并选择原生 384 维模型 |
+| `EMBEDDING_DIMENSION` | 数据库向量长度 | 固定为 `1024`，不可随意修改 |
+| `EMBEDDING_API_DIMENSIONS` | 可选地传给兼容 API 的 `dimensions` 参数 | 供应商支持降维时填写 `1024`；不支持则填 `0` 并选择原生 1024 维模型 |
 
-例如，使用支持 OpenAI `dimensions` 参数的 embedding 模型时，设置 `EMBEDDING_API_DIMENSIONS=384`。若服务返回的向量不是 384 维，项目会明确失败，不会静默退回 hash 向量或写入错误数据。
+例如，百炼 `text-embedding-v4` 可设置 `EMBEDDING_API_DIMENSIONS=1024`。若服务返回的向量不是 1024 维，项目会明确失败，不会静默退回 hash 向量或写入错误数据。
 
 配置完成、重启 API 后，按顺序执行：
 

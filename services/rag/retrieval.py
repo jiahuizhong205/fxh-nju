@@ -19,12 +19,13 @@ def _placeholder_embedding(text: str) -> list[float]:
     """
     import hashlib
     h = hashlib.md5(text.encode("utf-8")).digest()
-    return [(b / 127.5 - 1.0) for b in (h * 24)]  # 16 * 24 = 384 维
+    repeats = (settings.embedding_dimension + len(h) - 1) // len(h)
+    return [(b / 127.5 - 1.0) for b in (h * repeats)[:settings.embedding_dimension]]
 
 
 def embedding_signature() -> str:
     if settings.mock_llm:
-        return "mock-hash:384"
+        return f"mock-hash:{settings.embedding_dimension}"
     return (
         f"api:{settings.embedding_api_model}:{settings.embedding_dimension}"
         f":request-{settings.embedding_api_dimensions or 'provider-default'}"

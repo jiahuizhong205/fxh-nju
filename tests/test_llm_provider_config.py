@@ -15,41 +15,41 @@ class LlmProviderConfigTests(unittest.TestCase):
         self.assertEqual(configured.embedding_base_url, "")
         self.assertEqual(configured.embedding_api_key, "")
         self.assertEqual(configured.embedding_api_dimensions, 0)
-        self.assertEqual(configured.embedding_dimension, 384)
+        self.assertEqual(configured.embedding_dimension, 1024)
 
     def test_embedding_api_uses_its_own_endpoint_key_and_dimension(self):
         from services.rag import retrieval
 
         response = Mock()
         response.raise_for_status.return_value = None
-        response.json.return_value = {"data": [{"embedding": [0.25] * 384}]}
+        response.json.return_value = {"data": [{"embedding": [0.25] * 1024}]}
         with (
             patch.object(retrieval.settings, "embedding_base_url", "https://embedding.example/v1/"),
             patch.object(retrieval.settings, "embedding_api_key", "embedding-secret"),
             patch.object(retrieval.settings, "embedding_api_model", "embedding-model"),
-            patch.object(retrieval.settings, "embedding_api_dimensions", 384),
-            patch.object(retrieval.settings, "embedding_dimension", 384),
+            patch.object(retrieval.settings, "embedding_api_dimensions", 1024),
+            patch.object(retrieval.settings, "embedding_dimension", 1024),
             patch("services.rag.retrieval.httpx.post", return_value=response) as post,
         ):
             vector = retrieval._embed_via_api("测试")
 
-        self.assertEqual(len(vector), 384)
+        self.assertEqual(len(vector), 1024)
         self.assertEqual(post.call_args.args[0], "https://embedding.example/v1/embeddings")
         self.assertEqual(post.call_args.kwargs["headers"]["Authorization"], "Bearer embedding-secret")
-        self.assertEqual(post.call_args.kwargs["json"]["dimensions"], 384)
+        self.assertEqual(post.call_args.kwargs["json"]["dimensions"], 1024)
 
     def test_embedding_api_omits_optional_dimensions_for_generic_providers(self):
         from services.rag import retrieval
 
         response = Mock()
         response.raise_for_status.return_value = None
-        response.json.return_value = {"data": [{"embedding": [0.25] * 384}]}
+        response.json.return_value = {"data": [{"embedding": [0.25] * 1024}]}
         with (
             patch.object(retrieval.settings, "embedding_base_url", "https://embedding.example/v1"),
             patch.object(retrieval.settings, "embedding_api_key", "embedding-secret"),
             patch.object(retrieval.settings, "embedding_api_model", "embedding-model"),
             patch.object(retrieval.settings, "embedding_api_dimensions", 0),
-            patch.object(retrieval.settings, "embedding_dimension", 384),
+            patch.object(retrieval.settings, "embedding_dimension", 1024),
             patch("services.rag.retrieval.httpx.post", return_value=response) as post,
         ):
             retrieval._embed_via_api("测试")
@@ -65,7 +65,7 @@ class LlmProviderConfigTests(unittest.TestCase):
         with (
             patch.object(retrieval.settings, "embedding_base_url", "https://embedding.example/v1"),
             patch.object(retrieval.settings, "embedding_api_key", "embedding-secret"),
-            patch.object(retrieval.settings, "embedding_dimension", 384),
+            patch.object(retrieval.settings, "embedding_dimension", 1024),
             patch("services.rag.retrieval.httpx.post", return_value=response),
         ):
             with self.assertRaisesRegex(ValueError, "向量维度"):
