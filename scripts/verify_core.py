@@ -2,6 +2,7 @@
 
 import sys
 import asyncio
+import os
 
 def test_state_merge_evidence():
     """验证 evidence reducer 去重合并逻辑。"""
@@ -100,10 +101,13 @@ def test_ingestion_hash_dedup():
 
 
 def test_mock_embedding_without_local_model():
+    from unittest.mock import patch
     from services.rag import retrieval
     assert not hasattr(retrieval, "_init_local_model")
-    first = retrieval.embed_text("同一段文字")
-    second = retrieval.embed_text("同一段文字")
+    # 核心自检必须独立于开发者本机是否配置了真实 provider。
+    with patch.object(retrieval.settings, "mock_llm", True):
+        first = retrieval.embed_text("同一段文字")
+        second = retrieval.embed_text("同一段文字")
     assert first == second and len(first) == 384
     print("  PASS test_mock_embedding_without_local_model")
 
@@ -431,6 +435,8 @@ def test_cors_config():
 
 
 def main():
+    # 核心校验必须离线可重复，不继承开发者本机的真实 provider 配置。
+    os.environ["MOCK_LLM"] = "true"
     print("=== 福小禾 核心逻辑验证 ===\n")
 
     tests = [

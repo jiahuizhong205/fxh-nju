@@ -10,6 +10,7 @@ import uuid
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from fastapi import HTTPException
 from pydantic import ValidationError
@@ -130,8 +131,10 @@ class BackendContractTests(unittest.TestCase):
 
         self.assertFalse(hasattr(retrieval, "_init_local_model"))
         self.assertFalse(hasattr(retrieval, "_embedding_model"))
-        first = retrieval.embed_text("同一段文字")
-        second = retrieval.embed_text("同一段文字")
+        # 该单测验证 mock 分支，不能受开发者本机真实 LLM 配置影响。
+        with patch.object(retrieval.settings, "mock_llm", True):
+            first = retrieval.embed_text("同一段文字")
+            second = retrieval.embed_text("同一段文字")
         self.assertEqual(first, second)
         self.assertEqual(len(first), 384)
 

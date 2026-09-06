@@ -86,6 +86,7 @@ class LlmProviderConfigTests(unittest.TestCase):
         self.assertTrue(reindex.exists())
         self.assertTrue(preflight.exists())
         self.assertIn("embedding 连通性检查", preflight.read_text(encoding="utf-8"))
+        self.assertIn("HTTP {exc.response.status_code}", preflight.read_text(encoding="utf-8"))
         self.assertIn(".env", dockerignore.splitlines())
 
     def test_agents_are_scoped_to_authenticated_user_and_database_data(self):

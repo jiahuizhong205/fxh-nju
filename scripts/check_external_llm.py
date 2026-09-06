@@ -3,6 +3,7 @@
 from services.agent_runtime.llm import create_chat_model
 from apps.api.config import settings
 from services.rag.retrieval import embed_text
+import httpx
 
 
 def _configured(value: str, name: str) -> None:
@@ -24,13 +25,28 @@ def main() -> None:
     ):
         _configured(value, name)
 
-    vector = embed_text("福小禾 embedding 连通性检查")
+    try:
+        vector = embed_text("福小禾 embedding 连通性检查")
+    except httpx.HTTPStatusError as exc:
+        raise RuntimeError(
+            f"embedding 服务请求失败（HTTP {exc.response.status_code}）；请检查密钥、模型权限和 dimensions 配置"
+        ) from None
+    except httpx.RequestError:
+        raise RuntimeError("embedding 服务网络连接失败；请检查地址、DNS、防火墙和 TLS 配置") from None
     if len(vector) != settings.embedding_dimension:
         raise RuntimeError("embedding 返回维度与数据库配置不一致")
     print(f"PASS embedding：{len(vector)} 维")
 
     model = create_chat_model(temperature=0)
-    response = model.invoke("仅回复 OK")
+    try:
+        response = model.invoke("仅回复 OK")
+    except Exception as exc:
+        status_code = getattr(exc, "status_code", None)
+        if status_code:
+            raise RuntimeError(
+                f"聊天服务请求失败（HTTP {status_code}）；请检查模型名、密钥和模型权限"
+            ) from None
+        raise RuntimeError("聊天服务调用失败；请检查地址、模型兼容性和网络配置") from None
     content = str(getattr(response, "content", "")).strip()
     if not content:
         raise RuntimeError("LLM 未返回文本内容")

@@ -66,7 +66,7 @@
 
 ```bash
 cp .env.example .env
-docker compose -f infra/compose/docker-compose.yml up -d --build
+docker compose --env-file .env -f infra/compose/docker-compose.yml up -d --build
 ```
 
 打开 `http://127.0.0.1:5173`，API 健康检查为 `http://127.0.0.1:8000/api/health`。
@@ -74,8 +74,8 @@ docker compose -f infra/compose/docker-compose.yml up -d --build
 首次空数据库需要导入政策和专业目录。真实 LLM 模式下先按“接入真实 LLM”完成预检；mock 模式可直接导入：
 
 ```bash
-docker compose -f infra/compose/docker-compose.yml exec -T api python scripts/seed_real_policy.py
-docker compose -f infra/compose/docker-compose.yml exec -T api python scripts/sync_official_minor_data.py
+docker compose --env-file .env -f infra/compose/docker-compose.yml exec -T api python scripts/seed_real_policy.py
+docker compose --env-file .env -f infra/compose/docker-compose.yml exec -T api python scripts/sync_official_minor_data.py
 ```
 
 第二条命令会从南京大学本科生院官方链接下载 2025 版培养方案；服务器无法访问该链接时，先自行下载 PDF，再将文件传入容器并使用 `--pdf /path/to/file.pdf`。

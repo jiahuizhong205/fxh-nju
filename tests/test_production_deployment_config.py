@@ -9,6 +9,7 @@ class ProductionDeploymentConfigTests(unittest.TestCase):
         compose = (self.ROOT / "infra/compose/docker-compose.prod.yml").read_text(encoding="utf-8")
 
         self.assertIn("Dockerfile.web.prod", compose)
+        self.assertIn("PYTHONPATH: /app", compose)
         self.assertIn('"127.0.0.1:${APP_PORT:-8080}:80"', compose)
         self.assertNotIn('"5432:5432"', compose)
         self.assertNotIn('"6379:6379"', compose)
