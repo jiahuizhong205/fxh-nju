@@ -113,7 +113,7 @@ def build_career_outcomes(pathways: list[dict], jobs: list[dict]) -> list[dict]:
 
 def match_jobs(major: str, minor: str | None = None, jobs: list[dict] | None = None) -> list[dict]:
     """按主修+辅修专业匹配岗位，计算技能覆盖度。"""
-    jobs = jobs or SAMPLE_JOBS
+    jobs = SAMPLE_JOBS if jobs is None else jobs
     results = []
     for job in jobs:
         score = 0

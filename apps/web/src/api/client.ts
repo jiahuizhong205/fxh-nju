@@ -139,6 +139,12 @@ export interface StudentProfile {
   updated_at: string | null
 }
 
+export interface ProfileOptions {
+  version: number
+  interests: string[]
+  strengths: string[]
+}
+
 export interface ProfileInput {
   major: string
   grade: string
@@ -163,6 +169,10 @@ export interface Program {
   required_math_level: string
   semesters_needed: number
   discipline: string
+  course_count: number
+  participant_count: number
+  catalog_version: string
+  source_url: string
   has_plan?: boolean
 }
 
@@ -180,6 +190,10 @@ export interface PlanItem {
   course: string
   credits: number
   campus: string
+  course_code?: string
+  category?: string
+  official_term?: string
+  source_url?: string
 }
 
 export interface PlanResult {
@@ -201,6 +215,21 @@ export interface Job {
   skills_preferred: string[]
   deadline: string
   source: string
+  source_url?: string
+  data_status?: string
+}
+
+export interface LearningProgress {
+  completed_credits: number
+  in_progress_credits: number
+  planned_credits: number
+  total_credits: number
+  learning_days: number
+  streak_days: number
+  target_credits: number
+  completion_percent: number
+  plan_program: string | null
+  records: Array<Record<string, unknown>>
 }
 
 export async function fetchProfile(): Promise<StudentProfile | null> {
@@ -208,6 +237,33 @@ export async function fetchProfile(): Promise<StudentProfile | null> {
   if (res.status === 401) return null
   const data = await jsonResponse<{ profile?: StudentProfile }>(res, '学生画像加载失败')
   return data.profile ?? null
+}
+
+export async function fetchProfileOptions(): Promise<ProfileOptions> {
+  const res = await fetch(`${BASE}/profile/options`, { headers: authHeaders() })
+  return jsonResponse<ProfileOptions>(res, '画像选项加载失败')
+}
+
+export async function fetchAvatar(): Promise<Blob | null> {
+  const res = await fetch(`${BASE}/profile/avatar`, { headers: authHeaders(), cache: 'no-store' })
+  if (res.status === 404) return null
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}))
+    throw new Error(data.detail || '头像加载失败')
+  }
+  return res.blob()
+}
+
+export async function uploadAvatar(file: File): Promise<{ size_bytes: number; content_type: string; updated_at: string | null }> {
+  const body = new FormData()
+  body.append('file', file)
+  const res = await fetch(`${BASE}/profile/avatar`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body,
+  })
+  const data = await jsonResponse<{ avatar: { size_bytes: number; content_type: string; updated_at: string | null } }>(res, '头像上传失败')
+  return data.avatar
 }
 
 export async function saveProfile(input: ProfileInput): Promise<StudentProfile> {
@@ -272,6 +328,33 @@ export async function fetchJob(id: string): Promise<Job> {
   return data.job
 }
 
+export async function fetchLearningProgress(): Promise<LearningProgress> {
+  const res = await fetch(`${BASE}/learning/progress`, { headers: authHeaders() })
+  return jsonResponse<LearningProgress>(res, '学习进度加载失败')
+}
+
+export async function fetchFavoriteJobIds(): Promise<string[]> {
+  const res = await fetch(`${BASE}/favorites/jobs`, { headers: authHeaders() })
+  const data = await jsonResponse<{ job_ids: string[] }>(res, '岗位收藏加载失败')
+  return data.job_ids ?? []
+}
+
+export async function addFavoriteJob(id: string): Promise<void> {
+  const res = await fetch(`${BASE}/favorites/jobs/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    headers: authHeaders(),
+  })
+  await jsonResponse(res, '岗位收藏失败')
+}
+
+export async function removeFavoriteJob(id: string): Promise<void> {
+  const res = await fetch(`${BASE}/favorites/jobs/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  })
+  await jsonResponse(res, '取消收藏失败')
+}
+
 export type UserPreferences = Record<string, unknown>
 
 export async function fetchPreferences(): Promise<UserPreferences> {
@@ -304,21 +387,6 @@ export async function submitFeedback(payload: {
   return jsonResponse<{ id: string; status: string }>(res, '反馈提交失败')
 }
 
-const FAVORITE_JOBS_KEY = 'fxh_favorite_jobs'
-
-export function getFavoriteJobIds(): string[] {
-  try {
-    const value = JSON.parse(localStorage.getItem(FAVORITE_JOBS_KEY) || '[]')
-    return Array.isArray(value) ? value.filter((id): id is string => typeof id === 'string') : []
-  } catch {
-    return []
-  }
-}
-
-export function saveFavoriteJobIds(ids: string[]) {
-  localStorage.setItem(FAVORITE_JOBS_KEY, JSON.stringify([...new Set(ids)]))
-}
-
 export interface SearchResult {
   chunk_id: string
   content: string
@@ -340,6 +408,7 @@ export interface AuthUser {
   id: string
   username: string
   nickname: string
+  onboarding_completed: boolean
 }
 
 export interface AuthResponse {
@@ -369,6 +438,16 @@ export function register(username: string, password: string, nickname: string): 
 
 export function login(username: string, password: string): Promise<AuthResponse> {
   return authRequest('/auth/login', { username, password })
+}
+
+export async function updateOnboardingStatus(completed: boolean): Promise<boolean> {
+  const res = await fetch(`${BASE}/auth/onboarding`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify({ completed }),
+  })
+  const data = await jsonResponse<{ onboarding_completed: boolean }>(res, '引导状态保存失败')
+  return data.onboarding_completed
 }
 
 export function logout(): Promise<{ status: string }> {

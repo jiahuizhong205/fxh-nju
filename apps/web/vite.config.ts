@@ -7,7 +7,8 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'http://localhost:8000',
+        // Vite 在 Docker 容器中运行，需通过 compose 服务名访问 API。
+        target: 'http://api:8000',
         changeOrigin: true,
       },
     },

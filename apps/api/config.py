@@ -6,11 +6,20 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql+asyncpg://fuxiaohe:fuxiaohe_dev@localhost:5432/fuxiaohe"
     redis_url: str = "redis://localhost:6379/0"
-    embedding_model: str = "BAAI/bge-small-zh-v1.5"
-    embedding_api_model: str = "BAAI/bge-m3"
-    llm_base_url: str = "http://localhost:11434/v1"
-    llm_model: str = "qwen2.5:7b"
-    llm_api_key: str = "ollama"
+    # 兼容旧 .env；运行时不再加载该本地模型字段。
+    embedding_model: str = ""
+    embedding_api_model: str = ""
+    embedding_base_url: str = ""
+    embedding_api_key: str = ""
+    embedding_api_timeout_seconds: float = 15.0
+    # 0 表示不向 provider 传递 OpenAI 的 dimensions 参数；当前数据库固定存储 1024 维。
+    embedding_api_dimensions: int = 0
+    embedding_dimension: int = 1024
+    llm_base_url: str = ""
+    llm_model: str = ""
+    llm_api_key: str = ""
+    llm_timeout_seconds: float = 45.0
+    llm_max_retries: int = 2
     chunk_size: int = 500
     chunk_overlap: int = 80
     top_k_retrieval: int = 8
@@ -18,7 +27,7 @@ class Settings(BaseSettings):
     rate_limit_window_seconds: int = 60
     max_upload_bytes: int = 10 * 1024 * 1024  # 10 MB
     api_key: str = ""
-    # 本地 / Docker 默认使用 mock，真实模型必须通过环境变量显式开启。
+    # 本地 / Docker 默认使用 mock，真实模型必须通过环境变量显式开启；不加载本地模型。
     mock_llm: bool = True
     # 验证码供应商可选；留空时仅创建挑战，不访问外部网络。
     verification_provider_url: str = ""

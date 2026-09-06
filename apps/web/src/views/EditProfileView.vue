@@ -1,12 +1,14 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { computed, onBeforeUnmount, ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { fetchProfile, fetchPrograms, updateProfile, updateNickname } from '../api/client'
+import { fetchProfile, fetchProfileOptions, fetchPrograms, updateProfile, updateNickname } from '../api/client'
 import { useAuthStore } from '../stores/auth'
+import { useAvatarStore } from '../stores/avatar'
 import BackButton from '../components/BackButton.vue'
 
 const router = useRouter()
 const auth = useAuthStore()
+const avatarStore = useAvatarStore()
 
 const nickname = ref('')
 const major = ref('')
@@ -20,13 +22,16 @@ const campusFlexibility = ref(false)
 const creditBudget = ref(0)
 const certificateGoal = ref('none')
 const majors = ref<string[]>([])
-const avatarSrc = ref('/illustrations/avatar-wreath.png')
 const avatarInput = ref<HTMLInputElement | null>(null)
+const avatarFile = ref<File | null>(null)
+const avatarPreviewUrl = ref('')
+const avatarSrc = computed(() => avatarPreviewUrl.value || avatarStore.avatarUrl)
+const saving = ref(false)
 
 const grades = ['大一', '大二', '大三', '大四']
 const campuses = ['仙林校区', '鼓楼校区', '苏州校区']
-const interestOptions = ['写作', '传播', '数据分析', '编程', '设计', '法律', '金融', '人工智能']
-const strengthOptions = ['创意思维', '逻辑推理', '数据处理', '表达沟通', '动手实验', '组织协调', '编程基础', '外语能力']
+const interestOptions = ref<string[]>([])
+const strengthOptions = ref<string[]>([])
 const certificateOptions = [
   { value: 'degree', label: '辅修学位' },
   { value: 'cert', label: '结业证书' },
@@ -35,8 +40,10 @@ const certificateOptions = [
 
 onMounted(async () => {
   nickname.value = auth.user?.nickname || ''
-  const [p, programs] = await Promise.all([fetchProfile(), fetchPrograms()])
+  const [p, programs, options] = await Promise.all([fetchProfile(), fetchPrograms(), fetchProfileOptions(), avatarStore.load()])
   majors.value = programs.map(program => program.name)
+  interestOptions.value = options.interests
+  strengthOptions.value = options.strengths
   if (!p) return
   major.value = p.major
   grade.value = p.grade
@@ -56,8 +63,23 @@ function chooseAvatar() {
 
 function handleAvatarChange(event: Event) {
   const file = (event.target as HTMLInputElement).files?.[0]
-  if (file) avatarSrc.value = URL.createObjectURL(file)
+  if (!file) return
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+    alert('头像仅支持 JPG、PNG 或 WebP')
+    return
+  }
+  if (file.size > 2 * 1024 * 1024) {
+    alert('头像文件不能超过 2 MB')
+    return
+  }
+  if (avatarPreviewUrl.value) URL.revokeObjectURL(avatarPreviewUrl.value)
+  avatarFile.value = file
+  avatarPreviewUrl.value = URL.createObjectURL(file)
 }
+
+onBeforeUnmount(() => {
+  if (avatarPreviewUrl.value) URL.revokeObjectURL(avatarPreviewUrl.value)
+})
 
 function toggle(list: string[], label: string) {
   const i = list.indexOf(label)
@@ -66,6 +88,7 @@ function toggle(list: string[], label: string) {
 }
 
 async function save() {
+  if (saving.value) return
   if (!nickname.value.trim()) {
     alert('请填写昵称')
     return
@@ -74,26 +97,29 @@ async function save() {
     alert('请填写主修专业')
     return
   }
+  saving.value = true
   try {
     await updateNickname(nickname.value.trim())
     auth.setNickname(nickname.value.trim())
+    await updateProfile({
+      major: major.value,
+      grade: grade.value,
+      campus: campus.value,
+      interests: interests.value,
+      strengths: strengths.value,
+      career_goals: careerGoals.value,
+      math_willingness: mathWillingness.value,
+      campus_flexibility: campusFlexibility.value,
+      credit_budget: creditBudget.value,
+      certificate_goal: certificateGoal.value,
+    })
+    if (avatarFile.value) await avatarStore.upload(avatarFile.value)
+    await router.push('/profile')
   } catch (e: any) {
-    alert(e.message)
-    return
+    alert(e.message || '保存失败，请稍后重试')
+  } finally {
+    saving.value = false
   }
-  await updateProfile({
-    major: major.value,
-    grade: grade.value,
-    campus: campus.value,
-    interests: interests.value,
-    strengths: strengths.value,
-    career_goals: careerGoals.value,
-    math_willingness: mathWillingness.value,
-    campus_flexibility: campusFlexibility.value,
-    credit_budget: creditBudget.value,
-    certificate_goal: certificateGoal.value,
-  })
-  router.push('/profile')
 }
 </script>
 
@@ -112,7 +138,7 @@ async function save() {
         <img class="avatar" :src="avatarSrc" alt="头像" />
         <span class="avatar-camera" aria-hidden="true">▣</span>
       </button>
-      <input ref="avatarInput" class="avatar-input" type="file" accept="image/*" @change="handleAvatarChange" />
+      <input ref="avatarInput" class="avatar-input" type="file" accept="image/jpeg,image/png,image/webp" @change="handleAvatarChange" />
       <button type="button" class="avatar-hint" @click="chooseAvatar">点击更换园丁头像</button>
     </section>
 
@@ -182,7 +208,7 @@ async function save() {
       </div>
     </details>
 
-    <button class="btn-primary" @click="save">保存园丁卡片</button>
+    <button class="btn-primary" :disabled="saving" @click="save">{{ saving ? '正在保存…' : '保存园丁卡片' }}</button>
     <p class="foot">你的信息仅用于福小禾提供个性化推荐，不会对外展示 🍀</p>
   </div>
 </template>

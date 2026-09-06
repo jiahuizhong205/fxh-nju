@@ -52,6 +52,10 @@ class PlanItem:
     course: str
     credits: int
     campus: str
+    course_code: str = ""
+    category: str = ""
+    official_term: str = ""
+    source_url: str = ""
 
 
 @dataclass
@@ -65,7 +69,7 @@ class PlanResult:
 
 def generate_plan(program_name: str, profile: dict, plans: dict | None = None) -> PlanResult:
     """生成课程规划——贪心分配 + 约束检查。"""
-    plans = plans or PROGRAM_PLANS
+    plans = PROGRAM_PLANS if plans is None else plans
     courses = plans.get(program_name, [])
     if not courses:
         return PlanResult(program_name=program_name, infeasible=True, warnings=[f"未找到{program_name}的培养方案"])
@@ -106,6 +110,10 @@ def generate_plan(program_name: str, profile: dict, plans: dict | None = None) -
             course=course["course"],
             credits=course["credits"],
             campus=course["campus"],
+            course_code=course.get("course_code", ""),
+            category=course.get("category", ""),
+            official_term=course.get("official_term", course.get("term", "")),
+            source_url=course.get("source_url", ""),
         )
         items.append(item)
 
@@ -124,6 +132,9 @@ def generate_plan(program_name: str, profile: dict, plans: dict | None = None) -
         it.term = "秋季" if it.semester % 2 == 1 else "春季"
 
     total_credits = sum(it.credits for it in items)
+    if any(item.source_url for item in items):
+        warnings.insert(0, "课程来自南京大学官方培养方案；具体班次、校区和上课时间以当期选课系统为准")
+
     return PlanResult(
         program_name=program_name,
         items=items,

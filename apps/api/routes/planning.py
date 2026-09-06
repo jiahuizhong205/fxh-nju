@@ -23,8 +23,8 @@ from apps.api.models import (
 )
 from apps.api.routes.auth import get_current_user
 from services.planning.recommendation_engine import recommend
-from services.planning.course_planner import generate_plan, PROGRAM_PLANS
-from services.planning.career_engine import SAMPLE_JOBS, build_career_outcomes, match_jobs
+from services.planning.course_planner import generate_plan
+from services.planning.career_engine import build_career_outcomes, match_jobs
 from services.planning.eligibility import evaluate_program_eligibility
 from services.planning.schedule_conflicts import auto_select_schedule, build_schedule_options, detect_schedule_conflicts
 from services.rag.knowledge_graph import get_skill_pathways
@@ -98,7 +98,7 @@ async def _latest_profile(db: AsyncSession, user_id) -> dict | None:
 
 
 async def _load_programs(db: AsyncSession) -> list[dict]:
-    result = await db.execute(select(Program))
+    result = await db.execute(select(Program).where(Program.is_active.is_(True)))
     progs = result.scalars().all()
     plan_names = set((await db.execute(select(ProgramPlanItem.program_name).distinct())).scalars())
     course_counts = dict(
@@ -123,15 +123,12 @@ async def _load_programs(db: AsyncSession) -> list[dict]:
             )
         ).all()
     )
-    # Keep the currently supported built-in templates discoverable until the
-    # corresponding database plan rows are imported. DB rows still take
-    # precedence when present and are never overwritten here.
-    plan_names.update(PROGRAM_PLANS.keys())
     return [{
         "name": p.name, "total_credits": p.total_credits, "campus": p.campus,
         "subject_rank": p.subject_rank, "core_courses": p.core_courses or [],
         "required_math": p.required_math, "required_math_level": p.required_math_level,
         "semesters_needed": p.semesters_needed, "discipline": p.discipline,
+        "catalog_version": p.catalog_version, "source_url": p.source_url,
         "has_plan": p.name in plan_names,
         "course_count": course_counts.get(p.name, len(p.core_courses or [])),
         "participant_count": participant_counts.get(p.name, 0),
@@ -146,6 +143,8 @@ async def _load_plans(db: AsyncSession) -> dict[str, list[dict]]:
         plans.setdefault(it.program_name, []).append({
             "semester": it.semester, "term": it.term,
             "course": it.course, "credits": it.credits, "campus": it.campus,
+            "course_code": it.course_code, "category": it.category,
+            "official_term": it.official_term, "source_url": it.source_url,
         })
     return plans
 
@@ -163,11 +162,13 @@ def _job_dict(j) -> dict:
         "responsibilities": j.responsibilities or [],
         "application_email": j.application_email,
         "application_note": j.application_note,
+        "source_url": j.source_url,
+        "data_status": j.data_status,
     }
 
 
 async def _load_jobs(db: AsyncSession) -> list[dict]:
-    result = await db.execute(select(Job))
+    result = await db.execute(select(Job).where(Job.is_active.is_(True)))
     return [_job_dict(j) for j in result.scalars().all()]
 
 
@@ -201,7 +202,7 @@ async def program_career_outcomes(program_name: str, db: AsyncSession = Depends(
     jobs = await _load_jobs(db)
     return {
         "program": program_name,
-        "outcomes": build_career_outcomes(get_skill_pathways(program_name), jobs or SAMPLE_JOBS),
+        "outcomes": build_career_outcomes(get_skill_pathways(program_name), jobs),
         "data_note": "统计来自当前岗位表和知识图谱映射，不代表真实就业率或官方就业去向",
     }
 
@@ -260,7 +261,7 @@ async def program_eligibility(
             "campus": item.campus,
         }
         for item in db_items
-    ] or PROGRAM_PLANS.get(program_name, [])
+    ]
 
     records_result = await db.execute(
         select(LearningRecord).where(LearningRecord.user_id == user.id)
@@ -437,7 +438,7 @@ async def course_plan(
 ):
     profile = await _latest_profile(db, user.id) or {}
     db_plans = await _load_plans(db)
-    plans = {**PROGRAM_PLANS, **db_plans}
+    plans = db_plans
     result = generate_plan(program, profile, plans)
     if not result.items:
         raise HTTPException(status_code=404, detail=f"未找到「{program}」的培养方案")
@@ -554,7 +555,7 @@ async def save_course_plan(
 ):
     profile = await _latest_profile(db, user.id) or {}
     db_plans = await _load_plans(db)
-    plans = {**PROGRAM_PLANS, **db_plans}
+    plans = db_plans
     result = generate_plan(payload.program, profile, plans)
     if not result.items:
         raise HTTPException(status_code=404, detail=f"未找到「{payload.program}」的培养方案")
@@ -719,7 +720,7 @@ async def recalculate_saved_plan(
 
     profile = await _latest_profile(db, user.id) or {}
     db_plans = await _load_plans(db)
-    plans = {**PROGRAM_PLANS, **db_plans}
+    plans = db_plans
     generated = generate_plan(plan.program_name, profile, plans)
     if not generated.items:
         raise HTTPException(status_code=404, detail=f"未找到「{plan.program_name}」的培养方案")
@@ -829,6 +830,10 @@ def _plan_item(it) -> dict:
     return {
         "semester": it.semester, "term": it.term, "year": it.year,
         "course": it.course, "credits": it.credits, "campus": it.campus,
+        "course_code": getattr(it, "course_code", ""),
+        "category": getattr(it, "category", ""),
+        "official_term": getattr(it, "official_term", ""),
+        "source_url": getattr(it, "source_url", ""),
     }
 
 
@@ -878,7 +883,7 @@ async def program_schedule_options(
     if not prog:
         raise HTTPException(status_code=404, detail=f"未找到「{name}」")
     db_plans = await _load_plans(db)
-    plans = {**PROGRAM_PLANS, **db_plans}
+    plans = db_plans
     plan_items = plans.get(name, [])
     course_result = await db.execute(
         select(Course).where(Course.department == prog.department).order_by(Course.course_name)
@@ -903,7 +908,7 @@ async def auto_schedule_program(
     if not prog:
         raise HTTPException(status_code=404, detail=f"未找到「{name}」")
     db_plans = await _load_plans(db)
-    plans = {**PROGRAM_PLANS, **db_plans}
+    plans = db_plans
     plan_items = plans.get(name, [])
     course_result = await db.execute(
         select(Course).where(Course.department == prog.department).order_by(Course.course_name)
@@ -1060,7 +1065,7 @@ async def delete_job_application(
 @router.get("/jobs/{job_id}")
 async def get_job(job_id: str, db: AsyncSession = Depends(get_db)):
     job = await db.get(Job, job_id)
-    if not job:
+    if not job or not job.is_active:
         raise HTTPException(status_code=404, detail="岗位不存在")
     return {"job": _job_dict(job)}
 

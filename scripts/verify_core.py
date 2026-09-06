@@ -2,6 +2,7 @@
 
 import sys
 import asyncio
+import os
 
 def test_state_merge_evidence():
     """验证 evidence reducer 去重合并逻辑。"""
@@ -99,13 +100,16 @@ def test_ingestion_hash_dedup():
     print("  PASS test_ingestion_hash_dedup")
 
 
-def test_embedding_fallback():
+def test_mock_embedding_without_local_model():
+    from unittest.mock import patch
     from services.rag import retrieval
-    retrieval._embedding_model = None
-    retrieval._use_api = False
-    retrieval._init_local_model()
-    mode = "API" if retrieval._use_api else "local"
-    print(f"  PASS test_embedding_fallback (mode={mode})")
+    assert not hasattr(retrieval, "_init_local_model")
+    # 核心自检必须独立于开发者本机是否配置了真实 provider。
+    with patch.object(retrieval.settings, "mock_llm", True):
+        first = retrieval.embed_text("同一段文字")
+        second = retrieval.embed_text("同一段文字")
+    assert first == second and len(first) == 1024
+    print("  PASS test_mock_embedding_without_local_model")
 
 
 def test_knowledge_graph_nodes():
@@ -431,6 +435,8 @@ def test_cors_config():
 
 
 def main():
+    # 核心校验必须离线可重复，不继承开发者本机的真实 provider 配置。
+    os.environ["MOCK_LLM"] = "true"
     print("=== 福小禾 核心逻辑验证 ===\n")
 
     tests = [
@@ -463,6 +469,7 @@ def main():
         test_rate_limiter_bucket,
         test_security_middleware_import,
         test_cors_config,
+        test_mock_embedding_without_local_model,
     ]
 
     passed = 0
@@ -474,13 +481,6 @@ def main():
         except Exception as e:
             print(f"  FAIL {t.__name__}: {e}")
             failed += 1
-
-    # 嵌入回退测试
-    print()
-    try:
-        test_embedding_fallback()
-    except Exception as e:
-        print(f"  SKIP test_embedding_fallback: {e}")
 
     print(f"\n{'='*40}")
     print(f"结果: {passed} 通过, {failed} 失败, 共 {passed + failed} 项")

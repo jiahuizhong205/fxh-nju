@@ -30,6 +30,10 @@ class ChatRequest(BaseModel):
     knowledge_node_name: str | None = Field(default=None, max_length=200)
 
 
+class FriendRequest(BaseModel):
+    user_id: UUID
+
+
 class ChatEvent(BaseModel):
     event: Literal["node_update", "token", "citation", "interrupt", "final", "error"]
     data: dict

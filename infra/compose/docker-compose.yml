@@ -35,10 +35,19 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://fuxiaohe:fuxiaohe_dev@postgres:5432/fuxiaohe
       REDIS_URL: redis://redis:6379/0
-      EMBEDDING_MODEL: BAAI/bge-small-zh-v1.5
+      PYTHONPATH: /app
       MOCK_LLM: ${MOCK_LLM:-true}
-      LLM_BASE_URL: ${LLM_BASE_URL:-http://host.docker.internal:11434/v1}
-      LLM_MODEL: ${LLM_MODEL:-qwen2.5:7b}
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-}
+      LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-45}
+      LLM_MAX_RETRIES: ${LLM_MAX_RETRIES:-2}
+      EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL:-}
+      EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
+      EMBEDDING_API_MODEL: ${EMBEDDING_API_MODEL:-}
+      EMBEDDING_API_TIMEOUT_SECONDS: ${EMBEDDING_API_TIMEOUT_SECONDS:-15}
+      EMBEDDING_API_DIMENSIONS: ${EMBEDDING_API_DIMENSIONS:-0}
+      EMBEDDING_DIMENSION: ${EMBEDDING_DIMENSION:-1024}
       VERIFICATION_PROVIDER_URL: ${VERIFICATION_PROVIDER_URL:-}
       VERIFICATION_PROVIDER_API_KEY: ${VERIFICATION_PROVIDER_API_KEY:-}
       VERIFICATION_PROVIDER_WEBHOOK_SECRET: ${VERIFICATION_PROVIDER_WEBHOOK_SECRET:-}
@@ -54,6 +63,8 @@ services:
       - ../../apps/api:/app/apps/api
       - ../../services:/app/services
       - ../../packages:/app/packages
+      - ../../scripts:/app/scripts
+      - ../../infra/migrations:/app/infra/migrations
     depends_on:
       postgres:
         condition: service_healthy

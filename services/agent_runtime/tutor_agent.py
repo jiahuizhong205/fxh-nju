@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from apps.api.config import settings
 from apps.api.models import StudentProfile
 from services.agent_runtime.state import AssistantState
+from services.agent_runtime.llm import create_chat_model
 from services.rag.knowledge_graph import get_knowledge_tree
 
 
@@ -30,20 +31,15 @@ class TutorAgent:
     llm: ChatOpenAI | None = None
 
     def __post_init__(self):
-        if self.llm is None and not settings.mock_llm:
-            from langchain_openai import ChatOpenAI
-
-            self.llm = ChatOpenAI(
-                base_url=settings.llm_base_url,
-                api_key=settings.llm_api_key,
-                model=settings.llm_model,
-                temperature=0.5,
-            )
+        if self.llm is None:
+            self.llm = create_chat_model(0.5)
 
     async def load_context(self, state: AssistantState) -> dict:
         """加载学生画像和学习上下文。"""
         result = await self.db.execute(
-            select(StudentProfile).order_by(StudentProfile.updated_at.desc()).limit(1)
+            select(StudentProfile)
+            .where(StudentProfile.user_id == state.get("user_id"))
+            .order_by(StudentProfile.updated_at.desc()).limit(1)
         )
         p = result.scalar_one_or_none()
         profile = {}

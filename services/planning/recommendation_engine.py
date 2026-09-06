@@ -218,7 +218,7 @@ def _build_explanation(program: dict, profile: dict, scores: dict, filter_reason
 
 def recommend(profile: dict, programs: list[dict] | None = None) -> list[dict]:
     """执行硬过滤 + 评分排序，返回 Top-N 推荐。"""
-    programs = programs or PROGRAMS
+    programs = PROGRAMS if programs is None else programs
     results = []
     for prog in programs:
         filt = hard_filter(prog, profile)

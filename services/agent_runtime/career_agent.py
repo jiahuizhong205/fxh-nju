@@ -9,8 +9,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.api.config import settings
-from apps.api.models import StudentProfile
+from apps.api.models import Job, StudentProfile
 from services.agent_runtime.state import AssistantState
+from services.agent_runtime.llm import create_chat_model
 from services.planning.career_engine import match_jobs
 
 
@@ -30,19 +31,14 @@ class CareerAgent:
     llm: ChatOpenAI | None = None
 
     def __post_init__(self):
-        if self.llm is None and not settings.mock_llm:
-            from langchain_openai import ChatOpenAI
-
-            self.llm = ChatOpenAI(
-                base_url=settings.llm_base_url,
-                api_key=settings.llm_api_key,
-                model=settings.llm_model,
-                temperature=0.3,
-            )
+        if self.llm is None:
+            self.llm = create_chat_model(0.3)
 
     async def load_profile(self, state: AssistantState) -> dict:
         result = await self.db.execute(
-            select(StudentProfile).order_by(StudentProfile.updated_at.desc()).limit(1)
+            select(StudentProfile)
+            .where(StudentProfile.user_id == state.get("user_id"))
+            .order_by(StudentProfile.updated_at.desc()).limit(1)
         )
         p = result.scalar_one_or_none()
         if not p:
@@ -65,8 +61,16 @@ class CareerAgent:
                 minor = prog_name
                 break
 
-        # ponytail: 接真实 LLM 时改传 await _load_jobs(self.db)，当前读引擎内存常量
-        matches = match_jobs(major, minor)
+        rows = (await self.db.execute(select(Job).where(Job.is_active.is_(True)))).scalars().all()
+        jobs = [{
+            "id": row.id, "employer": row.employer, "title": row.title,
+            "location": row.location, "majors": row.majors or [],
+            "preferred_cross": row.preferred_cross or [],
+            "skills_required": row.skills_required or [],
+            "skills_preferred": row.skills_preferred or [],
+            "deadline": row.deadline, "source": row.source,
+        } for row in rows]
+        matches = match_jobs(major, minor, jobs=jobs)
         return {"candidate_programs": matches}
 
     async def report(self, state: AssistantState) -> dict:

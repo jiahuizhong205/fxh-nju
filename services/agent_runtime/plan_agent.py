@@ -9,9 +9,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.api.config import settings
-from apps.api.models import StudentProfile
+from apps.api.models import ProgramPlanItem, StudentProfile
 from services.agent_runtime.state import AssistantState
-from services.planning.course_planner import generate_plan, PROGRAM_PLANS
+from services.agent_runtime.llm import create_chat_model
+from services.planning.course_planner import generate_plan
 
 
 @dataclass
@@ -20,19 +21,14 @@ class PlanAgent:
     llm: ChatOpenAI | None = None
 
     def __post_init__(self):
-        if self.llm is None and not settings.mock_llm:
-            from langchain_openai import ChatOpenAI
-
-            self.llm = ChatOpenAI(
-                base_url=settings.llm_base_url,
-                api_key=settings.llm_api_key,
-                model=settings.llm_model,
-                temperature=0.2,
-            )
+        if self.llm is None:
+            self.llm = create_chat_model(0.2)
 
     async def load_profile(self, state: AssistantState) -> dict:
         result = await self.db.execute(
-            select(StudentProfile).order_by(StudentProfile.updated_at.desc()).limit(1)
+            select(StudentProfile)
+            .where(StudentProfile.user_id == state.get("user_id"))
+            .order_by(StudentProfile.updated_at.desc()).limit(1)
         )
         p = result.scalar_one_or_none()
         if not p:
@@ -55,11 +51,23 @@ class PlanAgent:
                 "warnings": state.get("warnings", []) + ["无画像数据"],
             }
 
+        rows = (await self.db.execute(
+            select(ProgramPlanItem).order_by(ProgramPlanItem.program_name, ProgramPlanItem.semester)
+        )).scalars().all()
+        plans: dict[str, list[dict]] = {}
+        for row in rows:
+            plans.setdefault(row.program_name, []).append({
+                "semester": row.semester, "term": row.term, "course": row.course,
+                "credits": row.credits, "campus": row.campus,
+                "course_code": row.course_code, "category": row.category,
+                "official_term": row.official_term, "source_url": row.source_url,
+            })
+
         # 从消息中提取目标辅修专业
         messages = state.get("messages", [])
         query = messages[-1].content if messages else ""
         program_name = ""
-        for name in PROGRAM_PLANS:
+        for name in plans:
             if name in query:
                 program_name = name
                 break
@@ -68,11 +76,10 @@ class PlanAgent:
             return {
                 "study_plan": {},
                 "warnings": state.get("warnings", []) + ["请指定要规划的辅修专业名称"],
-                "available_programs": list(PROGRAM_PLANS.keys()),
+                "available_programs": list(plans.keys()),
             }
 
-        # ponytail: 接真实 LLM 时改传 await _load_plans(self.db)，当前读引擎内存常量
-        result = generate_plan(program_name, profile)
+        result = generate_plan(program_name, profile, plans=plans)
         return {"study_plan": {
             "program": result.program_name,
             "items": [{
@@ -94,10 +101,10 @@ class PlanAgent:
 
         if not study_plan:
             query = messages[-1].content if messages else ""
-            available = list(PROGRAM_PLANS.keys())
+            available = state.get("available_programs", [])
             return {
                 "answer": {
-                    "content": f"请指定要规划的辅修专业。当前支持: {', '.join(PROGRAM_PLANS.keys())}",
+                    "content": f"请指定要规划的辅修专业。当前支持: {', '.join(available[:20])}",
                     "citations": [],
                     "confidence": 0.0,
                 },

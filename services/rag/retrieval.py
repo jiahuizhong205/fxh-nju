@@ -6,38 +6,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.api.config import settings
 
-# ponytail: local embedding first, fall back to API if model unavailable (e.g. no HF access)
-_embedding_model = None
-_use_api = False
-_placeholder_only = False
-
-
-def _init_local_model():
-    global _embedding_model, _use_api, _placeholder_only
-    if _embedding_model is not None or _use_api or _placeholder_only:
-        return
-    # mock 模式不加载任何本地模型，也不因缺少外部 embedding 服务阻塞启动。
-    if settings.mock_llm:
-        _placeholder_only = True
-        return
-    # 仅尝试本地缓存，不触发下载（国内 HF 不通会卡很久）
-    try:
-        from sentence_transformers import SentenceTransformer
-        _embedding_model = SentenceTransformer(settings.embedding_model, local_files_only=True)
-    except Exception:
-        _use_api = True
-
-
 def embed_text(text: str) -> list[float]:
-    _init_local_model()
-    if _placeholder_only:
+    if settings.mock_llm:
         return _placeholder_embedding(text)
-    if _use_api:
-        try:
-            return _embed_via_api(text)
-        except Exception:
-            return _placeholder_embedding(text)
-    return _embedding_model.encode(text, normalize_embeddings=True).tolist()
+    return _embed_via_api(text)
 
 
 def _placeholder_embedding(text: str) -> list[float]:
@@ -47,20 +19,38 @@ def _placeholder_embedding(text: str) -> list[float]:
     """
     import hashlib
     h = hashlib.md5(text.encode("utf-8")).digest()
-    return [(b / 127.5 - 1.0) for b in (h * 24)]  # 16 * 24 = 384 维
+    repeats = (settings.embedding_dimension + len(h) - 1) // len(h)
+    return [(b / 127.5 - 1.0) for b in (h * repeats)[:settings.embedding_dimension]]
+
+
+def embedding_signature() -> str:
+    if settings.mock_llm:
+        return f"mock-hash:{settings.embedding_dimension}"
+    return (
+        f"api:{settings.embedding_api_model}:{settings.embedding_dimension}"
+        f":request-{settings.embedding_api_dimensions or 'provider-default'}"
+    )
 
 
 def _embed_via_api(text: str) -> list[float]:
-    """OpenAI 兼容 embedding API 兜底。"""
+    """调用独立配置的 OpenAI 兼容 embedding API。"""
+    if not settings.embedding_base_url or not settings.embedding_api_key:
+        raise RuntimeError("真实向量服务尚未配置")
+    payload = {"model": settings.embedding_api_model, "input": text}
+    if settings.embedding_api_dimensions:
+        payload["dimensions"] = settings.embedding_api_dimensions
     resp = httpx.post(
-        f"{settings.llm_base_url}/embeddings",
-        json={"model": settings.embedding_api_model, "input": text},
-        headers={"Authorization": f"Bearer {settings.llm_api_key}"},
-        timeout=15,
+        f"{settings.embedding_base_url.rstrip('/')}/embeddings",
+        json=payload,
+        headers={"Authorization": f"Bearer {settings.embedding_api_key}"},
+        timeout=settings.embedding_api_timeout_seconds,
     )
     resp.raise_for_status()
     data = resp.json()
-    return data["data"][0]["embedding"]
+    vector = data["data"][0]["embedding"]
+    if len(vector) != settings.embedding_dimension:
+        raise ValueError(f"向量维度不匹配：期望 {settings.embedding_dimension}，实际 {len(vector)}")
+    return vector
 
 
 async def hybrid_search(
