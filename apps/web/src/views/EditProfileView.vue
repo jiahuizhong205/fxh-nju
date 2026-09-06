@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { fetchProfile, fetchPrograms, updateProfile, updateNickname } from '../api/client'
+import { fetchProfile, fetchProfileOptions, fetchPrograms, updateProfile, updateNickname } from '../api/client'
 import { useAuthStore } from '../stores/auth'
 import BackButton from '../components/BackButton.vue'
 
@@ -25,8 +25,8 @@ const avatarInput = ref<HTMLInputElement | null>(null)
 
 const grades = ['大一', '大二', '大三', '大四']
 const campuses = ['仙林校区', '鼓楼校区', '苏州校区']
-const interestOptions = ['写作', '传播', '数据分析', '编程', '设计', '法律', '金融', '人工智能']
-const strengthOptions = ['创意思维', '逻辑推理', '数据处理', '表达沟通', '动手实验', '组织协调', '编程基础', '外语能力']
+const interestOptions = ref<string[]>([])
+const strengthOptions = ref<string[]>([])
 const certificateOptions = [
   { value: 'degree', label: '辅修学位' },
   { value: 'cert', label: '结业证书' },
@@ -35,8 +35,10 @@ const certificateOptions = [
 
 onMounted(async () => {
   nickname.value = auth.user?.nickname || ''
-  const [p, programs] = await Promise.all([fetchProfile(), fetchPrograms()])
+  const [p, programs, options] = await Promise.all([fetchProfile(), fetchPrograms(), fetchProfileOptions()])
   majors.value = programs.map(program => program.name)
+  interestOptions.value = options.interests
+  strengthOptions.value = options.strengths
   if (!p) return
   major.value = p.major
   grade.value = p.grade

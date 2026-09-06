@@ -1,4 +1,17 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { me } from '../api/client'
+
+const onboardingRoutes = new Set(['interest-selection', 'time-preference', 'conflict-resolution'])
+let checkedToken = ''
+
+async function currentUser(token: string) {
+  const cached = JSON.parse(localStorage.getItem('fxh_user') || 'null')
+  if (checkedToken === token && typeof cached?.onboarding_completed === 'boolean') return cached
+  const user = await me()
+  checkedToken = token
+  localStorage.setItem('fxh_user', JSON.stringify(user))
+  return user
+}
 
 const router = createRouter({
   history: createWebHistory(),
@@ -146,10 +159,25 @@ const router = createRouter({
   ],
 })
 
-router.beforeEach((to) => {
+router.beforeEach(async (to) => {
   const token = localStorage.getItem('fxh_token')
   if (to.name !== 'login' && !token) return { name: 'login' }
-  if (to.name === 'login' && token) return { name: 'home' }
+  if (!token) return
+
+  try {
+    const user = await currentUser(token)
+    if (to.name === 'login') {
+      return user.onboarding_completed ? { name: 'home' } : { name: 'interest-selection', query: { onboarding: '1' } }
+    }
+    if (!user.onboarding_completed && !onboardingRoutes.has(String(to.name))) {
+      return { name: 'interest-selection', query: { onboarding: '1' } }
+    }
+  } catch {
+    checkedToken = ''
+    localStorage.removeItem('fxh_token')
+    localStorage.removeItem('fxh_user')
+    if (to.name !== 'login') return { name: 'login' }
+  }
 })
 
 export default router

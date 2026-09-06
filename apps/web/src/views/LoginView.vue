@@ -20,6 +20,10 @@ async function submit() {
     error.value = '请填写昵称'
     return
   }
+  if (mode.value === 'register' && (!/^.{8,20}$/.test(password.value) || !/[A-Za-z]/.test(password.value) || !/\d/.test(password.value))) {
+    error.value = '密码须为 8–20 位，并同时包含字母和数字'
+    return
+  }
   loading.value = true
   error.value = ''
   try {
@@ -27,7 +31,7 @@ async function submit() {
       ? await apiLogin(username.value.trim(), password.value)
       : await apiRegister(username.value.trim(), password.value, nickname.value.trim())
     auth.setAuth(res.token, res.user)
-    router.push(mode.value === 'register' ? '/interest-selection' : '/')
+    router.push(res.user.onboarding_completed ? '/' : { path: '/interest-selection', query: { onboarding: '1' } })
   } catch (e: any) {
     error.value = e.message
   } finally {
@@ -82,7 +86,7 @@ async function submit() {
             <rect x="3" y="11" width="18" height="11" rx="2"/>
             <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
           </svg>
-          <input v-model="password" type="password" placeholder="请输入密码（至少 6 位）" @keyup.enter="submit" />
+          <input v-model="password" type="password" placeholder="请输入密码（至少 8 位且包含字母和数字）" @keyup.enter="submit" />
         </div>
 
         <p v-if="error" class="error">{{ error }}</p>

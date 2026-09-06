@@ -139,6 +139,12 @@ export interface StudentProfile {
   updated_at: string | null
 }
 
+export interface ProfileOptions {
+  version: number
+  interests: string[]
+  strengths: string[]
+}
+
 export interface ProfileInput {
   major: string
   grade: string
@@ -208,6 +214,11 @@ export async function fetchProfile(): Promise<StudentProfile | null> {
   if (res.status === 401) return null
   const data = await jsonResponse<{ profile?: StudentProfile }>(res, '学生画像加载失败')
   return data.profile ?? null
+}
+
+export async function fetchProfileOptions(): Promise<ProfileOptions> {
+  const res = await fetch(`${BASE}/profile/options`, { headers: authHeaders() })
+  return jsonResponse<ProfileOptions>(res, '画像选项加载失败')
 }
 
 export async function saveProfile(input: ProfileInput): Promise<StudentProfile> {
@@ -340,6 +351,7 @@ export interface AuthUser {
   id: string
   username: string
   nickname: string
+  onboarding_completed: boolean
 }
 
 export interface AuthResponse {
@@ -369,6 +381,16 @@ export function register(username: string, password: string, nickname: string): 
 
 export function login(username: string, password: string): Promise<AuthResponse> {
   return authRequest('/auth/login', { username, password })
+}
+
+export async function updateOnboardingStatus(completed: boolean): Promise<boolean> {
+  const res = await fetch(`${BASE}/auth/onboarding`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify({ completed }),
+  })
+  const data = await jsonResponse<{ onboarding_completed: boolean }>(res, '引导状态保存失败')
+  return data.onboarding_completed
 }
 
 export function logout(): Promise<{ status: string }> {

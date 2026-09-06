@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { fetchProfile, fetchPrograms, updateProfile } from '../api/client'
+import { fetchProfile, fetchProfileOptions, fetchPrograms, updateOnboardingStatus, updateProfile } from '../api/client'
+import { useAuthStore } from '../stores/auth'
 
 const router = useRouter()
 const route = useRoute()
+const auth = useAuthStore()
 
 const stage = ref<1 | 2>(route.query.stage === '2' ? 2 : 1)
 const saving = ref(false)
@@ -12,15 +14,15 @@ const error = ref('')
 const loadingMajors = ref(true)
 
 const grades = ['大一', '大二', '大三', '大四', '研究生']
-const grade = ref('大二')
+const grade = ref('')
 const majors = ref<string[]>([])
 const major = ref('')
 
-const interestOptions = ['数据分析', '写作创作', '商业策划', '人文哲思', '硬核科技', '设计艺术']
-const interests = ref<string[]>(['写作创作', '数据分析'])
+const interestOptions = ref<string[]>([])
+const interests = ref<string[]>([])
 
-const strengthOptions = ['逻辑推理', '沟通表达', '创意思维', '数据处理', '动手实验', '组织协调', '外语能力', '编程基础', '其他']
-const strengths = ref<string[]>(['逻辑推理', '创意思维'])
+const strengthOptions = ref<string[]>([])
+const strengths = ref<string[]>([])
 
 function toggle(list: string[], item: string) {
   const i = list.indexOf(item)
@@ -30,13 +32,15 @@ function toggle(list: string[], item: string) {
 
 onMounted(async () => {
   try {
-    const [p, programs] = await Promise.all([fetchProfile(), fetchPrograms()])
+    const [p, programs, options] = await Promise.all([fetchProfile(), fetchPrograms(), fetchProfileOptions()])
     majors.value = programs.map(program => program.name)
+    interestOptions.value = options.interests
+    strengthOptions.value = options.strengths
     if (!p) {
       major.value = ''
       return
     }
-    grade.value = p.grade || '大二'
+    grade.value = p.grade || ''
     major.value = p.major || ''
     interests.value = p.interests ?? []
     strengths.value = p.strengths ?? []
@@ -65,9 +69,18 @@ function openOptional(path: string) {
   router.push({ path, query: { onboarding: '1' } })
 }
 
-function continueOnboarding() {
-  localStorage.setItem('fxh_onboarding_complete', '1')
-  router.push('/')
+async function continueOnboarding() {
+  saving.value = true
+  error.value = ''
+  try {
+    await updateOnboardingStatus(true)
+    auth.setOnboardingCompleted(true)
+    await router.replace('/')
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : '引导状态保存失败，请稍后重试。'
+  } finally {
+    saving.value = false
+  }
 }
 </script>
 
@@ -115,7 +128,7 @@ function continueOnboarding() {
     </section>
 
     <p v-if="error" class="error">{{ error }}</p>
-    <button class="btn-primary" :disabled="saving || loadingMajors || !major" @click="saveProfile">{{ saving ? '正在整理你的画像…' : '播下种子，开始生长' }}</button>
+    <button class="btn-primary" :disabled="saving || loadingMajors || !major || !grade" @click="saveProfile">{{ saving ? '正在整理你的画像…' : '播下种子，开始生长' }}</button>
   </div>
 
   <div v-else class="welcome-page">
@@ -151,7 +164,8 @@ function continueOnboarding() {
       </div>
     </section>
 
-    <button class="btn-primary" @click="continueOnboarding">开始探索福小禾 🌿</button>
+    <p v-if="error" class="error">{{ error }}</p>
+    <button class="btn-primary" :disabled="saving" @click="continueOnboarding">{{ saving ? '正在准备花园…' : '开始探索福小禾 🌿' }}</button>
   </div>
 </template>
 

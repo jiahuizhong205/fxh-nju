@@ -28,5 +28,12 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  return { token, user, isAuthenticated, setAuth, clearAuth, setNickname }
+  function setOnboardingCompleted(completed: boolean) {
+    if (user.value) {
+      user.value = { ...user.value, onboarding_completed: completed }
+      localStorage.setItem('fxh_user', JSON.stringify(user.value))
+    }
+  }
+
+  return { token, user, isAuthenticated, setAuth, clearAuth, setNickname, setOnboardingCompleted }
 })
