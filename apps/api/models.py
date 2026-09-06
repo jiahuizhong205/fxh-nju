@@ -349,6 +349,9 @@ class Program(Base):
     semesters_needed: Mapped[int] = mapped_column(default=4)
     discipline: Mapped[str] = mapped_column(String(50))
     department: Mapped[str] = mapped_column(String(100), default="")  # 所属院系，对应 Course.department
+    catalog_version: Mapped[str] = mapped_column(String(20), default="")
+    source_url: Mapped[str] = mapped_column(Text, default="")
+    is_active: Mapped[bool] = mapped_column(default=True)
 
 
 class ProgramEnrollment(Base):
@@ -377,6 +380,10 @@ class ProgramPlanItem(Base):
     course: Mapped[str] = mapped_column(String(200))
     credits: Mapped[int] = mapped_column()
     campus: Mapped[str] = mapped_column(String(50))
+    course_code: Mapped[str] = mapped_column(String(50), default="")
+    category: Mapped[str] = mapped_column(String(50), default="")
+    official_term: Mapped[str] = mapped_column(String(20), default="")
+    source_url: Mapped[str] = mapped_column(Text, default="")
 
 
 class Course(Base):
@@ -422,6 +429,9 @@ class Job(Base):
     responsibilities: Mapped[list] = mapped_column(JSON, default=list)
     application_email: Mapped[str] = mapped_column(String(200), default="")
     application_note: Mapped[str] = mapped_column(Text, default="")
+    source_url: Mapped[str] = mapped_column(Text, default="")
+    data_status: Mapped[str] = mapped_column(String(20), default="demo")
+    is_active: Mapped[bool] = mapped_column(default=False)
 
 
 class JobFavorite(Base):

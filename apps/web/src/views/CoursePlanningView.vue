@@ -152,10 +152,10 @@ function exportPlan() {
             <h3>{{ it.course }}</h3>
             <span class="credit">{{ it.credits }} 学分</span>
           </div>
-          <p class="course-desc">核心课程 · 辅修必修</p>
+          <p class="course-desc">{{ it.category || '培养方案课程' }}{{ it.course_code ? ` · ${it.course_code}` : '' }}</p>
           <div class="course-meta">
             <div>上课时间：{{ termLabel(it) }}</div>
-            <div>地点：{{ it.campus }}</div>
+            <div>地点：{{ it.campus || '以当期选课系统为准' }}</div>
           </div>
         </div>
       </section>

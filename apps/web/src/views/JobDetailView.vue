@@ -10,7 +10,7 @@ const job = ref<Job | null>(null)
 const favorited = ref(false)
 const error = ref('')
 const today = new Date().toISOString().slice(0, 10)
-const sourceUrl = computed(() => job.value?.source?.startsWith('http') ? job.value.source : '')
+const sourceUrl = computed(() => job.value?.source_url || (job.value?.source?.startsWith('http') ? job.value.source : ''))
 const expired = computed(() => Boolean(job.value?.deadline && job.value.deadline < today))
 
 onMounted(async () => {

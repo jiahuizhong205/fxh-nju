@@ -171,6 +171,8 @@ export interface Program {
   discipline: string
   course_count: number
   participant_count: number
+  catalog_version: string
+  source_url: string
   has_plan?: boolean
 }
 
@@ -188,6 +190,10 @@ export interface PlanItem {
   course: string
   credits: number
   campus: string
+  course_code?: string
+  category?: string
+  official_term?: string
+  source_url?: string
 }
 
 export interface PlanResult {
@@ -209,6 +215,8 @@ export interface Job {
   skills_preferred: string[]
   deadline: string
   source: string
+  source_url?: string
+  data_status?: string
 }
 
 export interface LearningProgress {
