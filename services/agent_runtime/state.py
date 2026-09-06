@@ -9,6 +9,7 @@ def merge_evidence(left: list, right: list) -> list:
 
 
 class AssistantState(TypedDict, total=False):
+    user_id: str
     messages: Annotated[list, add_messages]
     intent: Literal["policy", "recommend", "schedule", "tutor", "career", "multi"]
     knowledge_context: dict

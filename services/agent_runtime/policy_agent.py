@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.api.config import settings
 from services.agent_runtime.state import AssistantState
+from services.agent_runtime.llm import create_chat_model
 from services.rag.retrieval import hybrid_search, build_context, build_citations
 
 
@@ -18,15 +19,8 @@ class PolicyAgent:
     llm: ChatOpenAI | None = None
 
     def __post_init__(self):
-        if self.llm is None and not settings.mock_llm:
-            from langchain_openai import ChatOpenAI
-
-            self.llm = ChatOpenAI(
-                base_url=settings.llm_base_url,
-                api_key=settings.llm_api_key,
-                model=settings.llm_model,
-                temperature=0.1,
-            )
+        if self.llm is None:
+            self.llm = create_chat_model(0.1)
 
     async def retrieve(self, state: AssistantState) -> dict:
         """检索相关文档"""
@@ -123,6 +117,8 @@ class PolicyAgent:
         evidence_texts = "\n---\n".join(
             f"[{i+1}] {e.get('content', '')[:300]}" for i, e in enumerate(evidence[:5])
         )
+        from langchain_core.messages import SystemMessage
+
         check_prompt = SystemMessage(content=f"""检查以下回答中的每条政策事实是否被提供的文档所支持。
 
 证据文档：

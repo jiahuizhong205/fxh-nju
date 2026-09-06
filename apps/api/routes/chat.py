@@ -1,6 +1,7 @@
 """对话 API——SSE 流式响应。"""
 
 import json
+import logging
 from uuid import uuid4, UUID
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -16,6 +17,7 @@ from packages.contracts.schemas import ChatRequest, AssistantAnswer
 from services.security.input_guard import detect_injection
 
 router = APIRouter()
+logger = logging.getLogger("fuxiaohe.chat")
 
 
 def _mock_result(query: str, intent: str, knowledge_context: dict | None = None) -> dict:
@@ -42,6 +44,7 @@ async def _stream_answer(
     conversation_id: UUID,
     intent: str = "policy",
     knowledge_context: dict | None = None,
+    user_id: UUID | None = None,
 ):
     config = {"configurable": {"thread_id": str(thread_id)}}
 
@@ -65,13 +68,15 @@ async def _stream_answer(
 
             graph = RootGraph(db).compiled
             state: AssistantState = {
+                "user_id": str(user_id),
                 "messages": [HumanMessage(content=query)],
                 "intent": intent,
                 "knowledge_context": knowledge_context or {},
             }
             result = await graph.ainvoke(state, config)
-    except Exception as e:
-        yield f"event: error\ndata: {json.dumps({'message': str(e)}, ensure_ascii=False)}\n\n"
+    except Exception:
+        logger.exception("chat generation failed")
+        yield f"event: error\ndata: {json.dumps({'message': '模型服务暂不可用，请稍后重试'}, ensure_ascii=False)}\n\n"
         return
 
     answer = result.get("answer", {})
@@ -164,6 +169,7 @@ async def chat(
             conversation_id,
             request.intent or "policy",
             knowledge_context if any(knowledge_context.values()) else None,
+            user.id,
         ),
         media_type="text/event-stream",
         headers={

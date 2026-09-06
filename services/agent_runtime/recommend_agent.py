@@ -8,9 +8,10 @@ from langgraph.graph import StateGraph, START, END
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.api.config import settings
-from apps.api.models import StudentProfile
+from apps.api.models import Program, StudentProfile
 from sqlalchemy import select
 from services.agent_runtime.state import AssistantState
+from services.agent_runtime.llm import create_chat_model
 from services.planning.recommendation_engine import recommend
 
 
@@ -32,20 +33,15 @@ class RecommendAgent:
     llm: ChatOpenAI | None = None
 
     def __post_init__(self):
-        if self.llm is None and not settings.mock_llm:
-            from langchain_openai import ChatOpenAI
-
-            self.llm = ChatOpenAI(
-                base_url=settings.llm_base_url,
-                api_key=settings.llm_api_key,
-                model=settings.llm_model,
-                temperature=0.3,
-            )
+        if self.llm is None:
+            self.llm = create_chat_model(0.3)
 
     async def load_profile(self, state: AssistantState) -> dict:
         """加载用户画像——从 DB 取最新记录。"""
         result = await self.db.execute(
-            select(StudentProfile).order_by(StudentProfile.updated_at.desc()).limit(1)
+            select(StudentProfile)
+            .where(StudentProfile.user_id == state.get("user_id"))
+            .order_by(StudentProfile.updated_at.desc()).limit(1)
         )
         p = result.scalar_one_or_none()
         if not p:
@@ -74,8 +70,14 @@ class RecommendAgent:
                 "warnings": state.get("warnings", []) + ["无画像数据，无法推荐"],
             }
 
-        # ponytail: 接真实 LLM 时改传 await _load_programs(self.db)，当前读引擎内存常量
-        results = recommend(profile)
+        rows = (await self.db.execute(select(Program).where(Program.is_active.is_(True)))).scalars().all()
+        programs = [{
+            "name": row.name, "total_credits": row.total_credits, "campus": row.campus,
+            "subject_rank": row.subject_rank, "core_courses": row.core_courses or [],
+            "required_math": row.required_math, "required_math_level": row.required_math_level,
+            "semesters_needed": row.semesters_needed, "discipline": row.discipline,
+        } for row in rows]
+        results = recommend(profile, programs=programs)
         return {"candidate_programs": results}
 
     async def generate_report(self, state: AssistantState) -> dict:

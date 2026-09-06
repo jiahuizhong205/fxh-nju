@@ -1,2 +1,0 @@
-# 仅在关闭 MOCK_LLM 并使用本地缓存 embedding 模型时安装。
-sentence-transformers==3.3.1

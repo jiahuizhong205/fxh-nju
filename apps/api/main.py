@@ -6,11 +6,14 @@ from contextlib import asynccontextmanager
 from uuid import uuid4
 
 from fastapi import FastAPI, Depends
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.api.config import settings
-from apps.api.database import async_session, init_db
+from apps.api.database import async_session, get_db, init_db
+from apps.api.models import Document, DocumentChunk
 from apps.api.routes import account, auth, cache, chat, feedback, friends, knowledge, meta, notifications, preferences, profile, planning, sync
 from apps.api.middleware import (
     RateLimitMiddleware,
@@ -18,6 +21,7 @@ from apps.api.middleware import (
     TraceMiddleware,
     RequestLogMiddleware,
 )
+from services.rag.retrieval import embedding_signature
 
 # 结构化日志
 logging.basicConfig(
@@ -83,3 +87,46 @@ app.include_router(meta.router, prefix="/api/v1", tags=["meta"])
 @app.get("/api/health")
 async def health():
     return {"status": "ok", "version": "0.1.0"}
+
+
+@app.get("/api/readiness")
+async def readiness(db: AsyncSession = Depends(get_db)):
+    """检查主流程所需数据和外部模型配置，不暴露任何凭据。"""
+    try:
+        document_count = int((await db.execute(
+            select(func.count(Document.id)).where(Document.is_active.is_(True))
+        )).scalar_one())
+        metadata_rows = (await db.execute(select(DocumentChunk.metadata_))).scalars().all()
+        chunk_count = len(metadata_rows)
+    except Exception:
+        logger.exception("readiness database check failed")
+        return JSONResponse(status_code=503, content={"status": "not_ready", "database": "error"})
+
+    llm_configured = all((settings.llm_base_url, settings.llm_model, settings.llm_api_key))
+    embedding_configured = all((settings.embedding_base_url, settings.embedding_api_model, settings.embedding_api_key))
+    expected_signature = embedding_signature()
+    indexed_for_provider = sum(
+        1 for metadata in metadata_rows
+        if (metadata or {}).get("embedding_signature") == expected_signature
+    )
+    knowledge_ready = document_count > 0 and chunk_count > 0
+    provider_ready = settings.mock_llm or (
+        llm_configured and embedding_configured and indexed_for_provider == chunk_count
+    )
+    ready = knowledge_ready and provider_ready
+    payload = {
+        "status": "ready" if ready else "not_ready",
+        "database": "ok",
+        "knowledge": {
+            "active_documents": document_count,
+            "chunks": chunk_count,
+            "indexed_for_current_provider": indexed_for_provider,
+        },
+        "llm": {"mode": "mock" if settings.mock_llm else "external", "configured": llm_configured},
+        "embedding": {
+            "mode": "mock-hash" if settings.mock_llm else "external",
+            "configured": embedding_configured,
+            "expected_dimension": settings.embedding_dimension,
+        },
+    }
+    return JSONResponse(status_code=200 if ready else 503, content=payload)

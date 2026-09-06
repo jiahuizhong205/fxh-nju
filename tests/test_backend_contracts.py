@@ -128,11 +128,8 @@ class BackendContractTests(unittest.TestCase):
     def test_mock_embedding_does_not_load_local_model(self):
         from services.rag import retrieval
 
-        retrieval._embedding_model = None
-        retrieval._use_api = False
-        retrieval._placeholder_only = False
-        retrieval._init_local_model()
-        self.assertTrue(retrieval._placeholder_only)
+        self.assertFalse(hasattr(retrieval, "_init_local_model"))
+        self.assertFalse(hasattr(retrieval, "_embedding_model"))
         first = retrieval.embed_text("同一段文字")
         second = retrieval.embed_text("同一段文字")
         self.assertEqual(first, second)

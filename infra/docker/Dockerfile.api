@@ -3,11 +3,8 @@ FROM python:3.12-slim
 WORKDIR /app
 
 COPY requirements.txt .
-# MOCK_LLM 默认开启，sentence-transformers 会额外拉取 torch/CUDA 依赖；
-# 本镜像使用确定性 embedding 回退，真实 embedding 运行环境另行安装 requirements.ai.txt。
-RUN grep -viE '^sentence-transformers' requirements.txt > /tmp/requirements.runtime.txt \
-    && pip install --no-cache-dir -r /tmp/requirements.runtime.txt \
-    && rm /tmp/requirements.runtime.txt
+# 对话与向量均使用可选的外部 OpenAI 兼容接口，不安装本地模型/torch/CUDA。
+RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 

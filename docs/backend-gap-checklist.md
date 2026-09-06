@@ -7,14 +7,17 @@
 - 当前清单共有 4 项未完成项；除暂缓的真实消息供应商、外部同步和部署/合规验收外，职业模块仍缺少可验证的真实岗位数据源。
 - 当前 API 已具备认证、画像、偏好、对话、反馈、知识库、专业目录、推荐、培养方案和岗位详情等基础端点；`/api/health` 当前可正常返回。
 - 当前后端仍以 MVP 为主：主流程已停止从内存演示常量回退；课程采用官方方案和已抓取选课数据，未验证岗位已从接口隐藏。通知与外部同步仍未接入供应商，正式教务动作和管理端流程仍需继续完善。
-- 本阶段已将 Docker Compose 与配置固定为 mock 默认值，镜像不再安装 `sentence-transformers`、torch 或 CUDA；真实 embedding 依赖移至可选的 `requirements.ai.txt`。
+- 本阶段已将 Docker Compose 与配置固定为 mock 默认值，镜像不再安装 `sentence-transformers`、torch、CUDA 或本地模型；真实 embedding 仅通过独立外部 API 接入。
 - 本阶段已修复通知 worker、同步 worker 的容器启动路径；两个 worker 当前可持续运行，未配置 provider 时安全空转，不访问外部网络。
 - 本阶段已将数据库启动迁移收敛为编号 SQL + `schema_migrations` 记录；现有 PostgreSQL 数据卷已完成一次真实初始化验证，不删除业务数据。
 
 ### 今日完成（2026-09-06）
 
 - [x] 后端默认使用 mock LLM，只有显式关闭 `MOCK_LLM` 才会尝试真实模型；mock 路径不会加载本地大模型。
-- [x] Docker API/worker 镜像移除 AI 重依赖，新增可选 `requirements.ai.txt`，避免启动时拉取 torch/CUDA。
+- [x] Docker API/worker 镜像移除本地 AI 模型依赖，避免启动时拉取 torch/CUDA。
+- [x] 聊天与向量服务已有独立地址、密钥、模型、超时配置；真实模式不再在失败时静默退回伪向量，并校验固定 384 维输出。
+- [x] 新增 `/api/readiness` 和 `scripts/reembed_documents.py`，真实接口配置后可检查知识库是否已按当前 provider 全量重建。
+- [x] 推荐、规划、伴学和职业 Agent 已按当前登录账号读取画像，并从数据库读取专业、课程和已验证岗位，消除跨账号读取及演示常量回退。
 - [x] Compose worker 增加 `PYTHONPATH=/app`，通知调度与同步调度容器均已验证为持续运行状态；PostgreSQL、Redis 保持健康。
 - [x] 新增轻量迁移运行器，按编号执行 `infra/migrations/*.sql`，并在 `schema_migrations` 中记录版本；重复启动不会重复执行已完成迁移。
 - [x] 新增迁移文件排序、SQL 字符串分号处理和启动入口契约测试；全量后端测试 108/108、核心校验 29/29 通过。

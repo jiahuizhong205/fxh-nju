@@ -99,13 +99,13 @@ def test_ingestion_hash_dedup():
     print("  PASS test_ingestion_hash_dedup")
 
 
-def test_embedding_fallback():
+def test_mock_embedding_without_local_model():
     from services.rag import retrieval
-    retrieval._embedding_model = None
-    retrieval._use_api = False
-    retrieval._init_local_model()
-    mode = "API" if retrieval._use_api else "local"
-    print(f"  PASS test_embedding_fallback (mode={mode})")
+    assert not hasattr(retrieval, "_init_local_model")
+    first = retrieval.embed_text("同一段文字")
+    second = retrieval.embed_text("同一段文字")
+    assert first == second and len(first) == 384
+    print("  PASS test_mock_embedding_without_local_model")
 
 
 def test_knowledge_graph_nodes():
@@ -463,6 +463,7 @@ def main():
         test_rate_limiter_bucket,
         test_security_middleware_import,
         test_cors_config,
+        test_mock_embedding_without_local_model,
     ]
 
     passed = 0
@@ -474,13 +475,6 @@ def main():
         except Exception as e:
             print(f"  FAIL {t.__name__}: {e}")
             failed += 1
-
-    # 嵌入回退测试
-    print()
-    try:
-        test_embedding_fallback()
-    except Exception as e:
-        print(f"  SKIP test_embedding_fallback: {e}")
 
     print(f"\n{'='*40}")
     print(f"结果: {passed} 通过, {failed} 失败, 共 {passed + failed} 项")

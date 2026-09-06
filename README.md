@@ -54,7 +54,7 @@
 | 前端 | Vue 3 + Vite + TypeScript + Pinia |
 | 后端 | Python 3.12 + FastAPI + LangGraph 1.x |
 | 向量库 | PostgreSQL 16 + pgvector |
-| 嵌入模型 | BAAI/bge-small-zh-v1.5（本地），OpenAI 兼容 API 兜底 |
+| 向量服务 | 可配置的外部 OpenAI 兼容 Embedding API（不安装本地模型） |
 | 编排 | LangGraph StateGraph + 子图 + SSE Streaming |
 | 任务 | Celery/Dramatiq + Redis |
 | 隔离 | Docker 沙箱（代码执行/文档解析/浏览器） |
@@ -70,8 +70,8 @@ docker compose up -d postgres redis
 # 2. 安装依赖
 pip install -r requirements.txt
 
-# 3. 灌入种子数据
-PYTHONPATH=. python scripts/seed_policy_data.py
+# 3. 同步南京大学官方辅修培养方案（也可通过 --pdf 使用已下载文件）
+PYTHONPATH=. python scripts/sync_official_minor_data.py
 
 # 4. 启动后端 (默认 MOCK_LLM=true 走 mock，无需 LLM；接真实 LLM 见下文)
 uvicorn apps.api.main:app --reload --port 8000
@@ -114,38 +114,22 @@ Docker Compose 已包含同一个 `notification-worker` 服务；如需接入自
 
 ## 接入真实 LLM / Embedding（可选）
 
-默认 `MOCK_LLM=true`，后端对问答走 mock 回复，且 mock 模式不会加载本地模型，embedding 使用确定性回退向量，**无需任何 LLM 或外部服务** 即可跑通确定性功能（画像、推荐、课程规划、岗位、落库、检索端点、安全策略）。要启用真实智能问答与向量检索，接入一个 OpenAI 兼容服务后改 `.env` 并重启后端：
-
-Docker 默认不会安装 `sentence-transformers`、torch 或 CUDA；需要使用本地缓存 embedding
-模型时，再额外安装 `requirements.ai.txt`，不会影响 mock 开发路径。
+默认 `MOCK_LLM=true`，后端对问答走 mock 回复，且不会加载本地模型；无需任何 LLM 或外部服务即可跑通画像、推荐、课程规划、落库和安全策略。真实问答需要分别配置聊天与向量接口，项目不会安装 `sentence-transformers`、torch、CUDA 或 Ollama。
 
 | 变量 | 含义 | 示例（硅基流动） |
 |------|------|------------------|
 | `LLM_BASE_URL` | OpenAI 兼容端点 | `https://api.siliconflow.cn/v1` |
 | `LLM_MODEL` | 对话模型 | `Qwen/Qwen2.5-7B-Instruct` |
 | `LLM_API_KEY` | API Key | `sk-...` |
+| `EMBEDDING_BASE_URL` | 独立向量端点 | provider 的 OpenAI 兼容地址 |
+| `EMBEDDING_API_KEY` | 向量 API Key | 可与聊天 Key 相同，也可不同 |
 | `EMBEDDING_API_MODEL` | 向量模型 | `BAAI/bge-m3` |
+| `EMBEDDING_DIMENSION` | pgvector 维度 | 当前固定为 `384` |
 | `MOCK_LLM` | 关闭 mock | `false` |
 
-> 对话模型与向量模型是两套模型，**不可共用**。检索兜底 `services/rag/retrieval.py::_embed_via_api` 走独立的 `EMBEDDING_API_MODEL`，与 `LLM_MODEL` 分离；本地无 `bge-small-zh-v1.5` 时自动走 API。
+> 对话与向量服务独立配置。当前数据库向量列为 384 维，必须选择直接返回 384 维的模型/接口；维度不符时系统会明确报错，不会静默使用伪向量。
 
-### 推荐 provider
-
-| 家 | chat | embedding | 一个 key 通吃 | 备注 |
-|----|------|-----------|--------------|------|
-| 硅基流动 SiliconFlow | ✅ | ✅ bge-m3 | ✅ | 免费额度，国内直连，最省事 |
-| 智谱 GLM | ✅ | ✅ embedding-3 | ✅ | 免费额度，`LLM_BASE_URL=https://open.bigmodel.cn/api/paas/v4` |
-| 通义千问 DashScope | ✅ | ✅ text-embedding-v3 | ✅ | OpenAI 兼容模式 |
-| DeepSeek | ✅ | ❌ 无 | ❌ | 便宜质量好，但无 embedding，需另配本地 bge |
-
-### 本地 Ollama（备选）
-
-```bash
-ollama pull qwen2.5:7b
-ollama pull nomic-embed-text
-```
-
-`.env`：`LLM_BASE_URL=http://localhost:11434/v1`、`LLM_MODEL=qwen2.5:7b`、`EMBEDDING_API_MODEL=nomic-embed-text`、`LLM_API_KEY=ollama`、`MOCK_LLM=false`。
+配置完成后先执行 `PYTHONPATH=. python scripts/reembed_documents.py` 重建知识库向量，再访问 `/api/readiness`；只有模型配置完整且全部文档使用当前向量签名时，真实模式才会返回 ready。
 
 ## 项目结构
 

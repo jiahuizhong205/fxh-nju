@@ -9,7 +9,7 @@ from sqlalchemy import select
 
 from apps.api.models import Document, DocumentChunk
 from apps.api.config import settings
-from services.rag.retrieval import embed_text
+from services.rag.retrieval import embed_text, embedding_signature
 
 
 def split_text(text: str, chunk_size: int | None = None, overlap: int | None = None) -> list[str]:
@@ -102,7 +102,7 @@ async def ingest_document(
             chunk_index=i,
             content=chunk_text,
             embedding=embedding,
-            metadata_={"title": title, "trust_level": trust_level},
+            metadata_={"title": title, "trust_level": trust_level, "embedding_signature": embedding_signature()},
         )
         db.add(chunk)
 
