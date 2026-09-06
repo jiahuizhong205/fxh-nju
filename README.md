@@ -145,6 +145,18 @@ curl -fsS http://127.0.0.1:8080/api/readiness
 
 `check_external_llm.py` 会验证一次 embedding 的实际维度和一次聊天回复；失败时先修正地址、模型名、密钥权限或 `EMBEDDING_API_DIMENSIONS`，不要直接执行重建。
 
+如需进一步确认每个面向用户的智能功能都能实际完成一次回答，可运行下列验收。它会对政策问答、个性化推荐、课程规划、伴学问答和职业探索各创建一个随机临时账号，读取完整 SSE 回答后自动删除该账号和临时岗位；不会读取、修改或输出真实用户数据和密钥。真实模型偶发冷启动较慢时，可按 `--intent` 单独重试。
+
+```bash
+# 依次验收全部五条智能链路。
+docker compose --env-file .env.production -f infra/compose/docker-compose.prod.yml \
+  exec -T api python scripts/verify_real_llm_agents.py
+
+# 只重试某一条链路。
+docker compose --env-file .env.production -f infra/compose/docker-compose.prod.yml \
+  exec -T api python scripts/verify_real_llm_agents.py --intent policy
+```
+
 ## 部署到自己的 Linux 服务器
 
 ### 1. 准备服务器
@@ -194,6 +206,8 @@ docker compose --env-file .env.production -f infra/compose/docker-compose.prod.y
   exec -T api python scripts/reembed_documents.py
 docker compose --env-file .env.production -f infra/compose/docker-compose.prod.yml \
   exec -T api python scripts/verify_user_journey.py --base-url http://api:8000
+docker compose --env-file .env.production -f infra/compose/docker-compose.prod.yml \
+  exec -T api python scripts/verify_real_llm_agents.py
 curl -fsS http://127.0.0.1:8080/api/readiness
 ```
 
