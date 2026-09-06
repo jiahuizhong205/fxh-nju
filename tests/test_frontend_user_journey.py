@@ -28,3 +28,17 @@ class FrontendUserJourneyContractTests(unittest.TestCase):
         self.assertIn("fetchProfileOptions", client)
         self.assertIn("fetchProfileOptions()", onboarding)
         self.assertIn("fetchProfileOptions()", edit_profile)
+
+    def test_avatar_is_uploaded_and_shared_across_primary_pages(self):
+        client = (ROOT / "apps/web/src/api/client.ts").read_text(encoding="utf-8")
+        edit_profile = (ROOT / "apps/web/src/views/EditProfileView.vue").read_text(encoding="utf-8")
+        home = (ROOT / "apps/web/src/views/HomeView.vue").read_text(encoding="utf-8")
+        profile = (ROOT / "apps/web/src/views/ProfileView.vue").read_text(encoding="utf-8")
+
+        self.assertIn("export async function uploadAvatar", client)
+        self.assertIn("export async function fetchAvatar", client)
+        self.assertIn("await avatarStore.upload(avatarFile.value)", edit_profile)
+        self.assertIn(':src="avatarStore.avatarUrl"', home)
+        self.assertIn(':src="avatarStore.avatarUrl"', profile)
+        self.assertNotIn('src="/illustrations/avatar-wreath.png"', home)
+        self.assertNotIn('src="/illustrations/avatar-wreath.png"', profile)

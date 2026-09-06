@@ -4,8 +4,10 @@ import { useRouter } from 'vue-router'
 import Icon from '../components/Icon.vue'
 import { fetchProfile, recommendPrograms, type StudentProfile, type Recommendation } from '../api/client'
 import { useAuthStore } from '../stores/auth'
+import { useAvatarStore } from '../stores/avatar'
 
 const auth = useAuthStore()
+const avatarStore = useAvatarStore()
 const router = useRouter()
 const profile = ref<StudentProfile | null>(null)
 const recommendations = ref<Recommendation[]>([])
@@ -51,7 +53,8 @@ function refreshRecommendation() {
 
 onMounted(async () => {
   try {
-    profile.value = await fetchProfile()
+    const [loadedProfile] = await Promise.all([fetchProfile(), avatarStore.load()])
+    profile.value = loadedProfile
     if (profile.value) await loadRecommendations()
   } catch (e) {
     error.value = e instanceof Error ? e.message : '首页数据加载失败，请稍后重试。'
@@ -63,7 +66,7 @@ onMounted(async () => {
   <div class="home">
     <section class="hero">
       <div class="hero-top">
-        <img class="avatar" src="/illustrations/avatar-wreath.png" alt="头像" />
+        <img class="avatar" :src="avatarStore.avatarUrl" alt="头像" />
         <div class="hero-id">
           <div class="hero-name">{{ displayName }} <span class="star">⭐</span></div>
         </div>

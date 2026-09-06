@@ -221,6 +221,28 @@ export async function fetchProfileOptions(): Promise<ProfileOptions> {
   return jsonResponse<ProfileOptions>(res, '画像选项加载失败')
 }
 
+export async function fetchAvatar(): Promise<Blob | null> {
+  const res = await fetch(`${BASE}/profile/avatar`, { headers: authHeaders(), cache: 'no-store' })
+  if (res.status === 404) return null
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}))
+    throw new Error(data.detail || '头像加载失败')
+  }
+  return res.blob()
+}
+
+export async function uploadAvatar(file: File): Promise<{ size_bytes: number; content_type: string; updated_at: string | null }> {
+  const body = new FormData()
+  body.append('file', file)
+  const res = await fetch(`${BASE}/profile/avatar`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body,
+  })
+  const data = await jsonResponse<{ avatar: { size_bytes: number; content_type: string; updated_at: string | null } }>(res, '头像上传失败')
+  return data.avatar
+}
+
 export async function saveProfile(input: ProfileInput): Promise<StudentProfile> {
   const res = await fetch(`${BASE}/profile`, {
     method: 'PUT',

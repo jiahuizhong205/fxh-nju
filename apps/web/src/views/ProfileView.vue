@@ -3,10 +3,12 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { fetchProfile, getFavoriteJobIds, logout, type StudentProfile } from '../api/client'
 import { useAuthStore } from '../stores/auth'
+import { useAvatarStore } from '../stores/avatar'
 import BackButton from '../components/BackButton.vue'
 
 const router = useRouter()
 const auth = useAuthStore()
+const avatarStore = useAvatarStore()
 const profile = ref<StudentProfile | null>(null)
 const loading = ref(true)
 const favoriteCount = ref(0)
@@ -22,13 +24,15 @@ const completionPercent = Math.round((harvestedCredits / totalCredits) * 100)
 
 async function handleLogout() {
   try { await logout() } catch { /* token 已失效也照常退出 */ }
+  avatarStore.reset()
   auth.clearAuth()
   router.push('/login')
 }
 
 onMounted(async () => {
   try {
-    profile.value = await fetchProfile()
+    const [loadedProfile] = await Promise.all([fetchProfile(), avatarStore.load()])
+    profile.value = loadedProfile
     favoriteCount.value = getFavoriteJobIds().length
   } catch {
     profile.value = null
@@ -45,7 +49,7 @@ onMounted(async () => {
       <div class="hero-top">
         <BackButton fallback="/" />
       </div>
-      <img class="avatar" src="/illustrations/avatar-wreath.png" alt="头像" />
+      <img class="avatar" :src="avatarStore.avatarUrl" alt="头像" />
       <h1>{{ displayName }} <span class="star">⭐</span></h1>
       <p class="major">{{ profileSummary }}</p>
       <p class="streak">你已经浇灌了 120 天的复合学习 🌻</p>
