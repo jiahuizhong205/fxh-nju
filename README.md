@@ -178,6 +178,8 @@ chmod 600 .env.production
 
 编辑 `.env.production`：替换 `POSTGRES_PASSWORD`、LLM 和 embedding 的占位值。数据库密码请使用长随机字母数字串；该文件已被 Git 忽略，绝不要把它提交、复制到聊天记录或上传到仓库。
 
+如果服务器从官方 PyPI 下载依赖很慢或超时，可在 `.env.production` 中把 `PIP_INDEX_URL` 改为你信任的区域镜像，并保留 `PIP_DEFAULT_TIMEOUT=300`、`PIP_RETRIES=5`。这些值只用于镜像构建阶段，不会传给应用；镜像源可用性和供应链风险由服务器维护者自行确认。
+
 ### 3. 启动生产服务
 
 ```bash

@@ -29,6 +29,10 @@ services:
     build:
       context: ../..
       dockerfile: infra/docker/Dockerfile.api
+      args:
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
+        PIP_DEFAULT_TIMEOUT: ${PIP_DEFAULT_TIMEOUT:-300}
+        PIP_RETRIES: ${PIP_RETRIES:-5}
     restart: unless-stopped
     command: ["uvicorn", "apps.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
     environment:
@@ -62,6 +66,10 @@ services:
     build:
       context: ../..
       dockerfile: infra/docker/Dockerfile.api
+      args:
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
+        PIP_DEFAULT_TIMEOUT: ${PIP_DEFAULT_TIMEOUT:-300}
+        PIP_RETRIES: ${PIP_RETRIES:-5}
     restart: unless-stopped
     command: ["python", "scripts/notification_worker.py"]
     environment:
@@ -77,6 +85,10 @@ services:
     build:
       context: ../..
       dockerfile: infra/docker/Dockerfile.api
+      args:
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
+        PIP_DEFAULT_TIMEOUT: ${PIP_DEFAULT_TIMEOUT:-300}
+        PIP_RETRIES: ${PIP_RETRIES:-5}
     restart: unless-stopped
     command: ["python", "scripts/sync_worker.py"]
     environment:
