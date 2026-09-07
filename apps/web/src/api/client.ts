@@ -1,4 +1,6 @@
 const BASE = '/api/v1'
+// 比 API 的 75 秒上限稍长：后端不可达时，浏览器也不能无限停留在“检索中”。
+const CLIENT_STREAM_TIMEOUT_MS = 90_000
 
 export interface Citation {
   citation_id: string
@@ -52,72 +54,89 @@ export function sendMessage(
   intent = 'policy',
 ): AbortController {
   const controller = new AbortController()
+  let timeoutTriggered = false
+  let reportedError = false
+  const timeoutId = window.setTimeout(() => {
+    timeoutTriggered = true
+    controller.abort()
+    reportError('连接服务器超时，请检查网络后重试')
+  }, CLIENT_STREAM_TIMEOUT_MS)
 
-  fetch(`${BASE}/chat`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...authHeaders() },
-    body: JSON.stringify({ message, thread_id: threadId, intent }),
-    signal: controller.signal,
-  }).then(async (res) => {
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}))
-      onError(data.detail || data.message || '消息发送失败')
-      return
-    }
-    const convId = res.headers.get('X-Conversation-Id')
-    const reader = res.body?.getReader()
-    if (!reader) {
-      onError('服务器未返回有效响应')
-      return
-    }
+  function reportError(message: string) {
+    if (reportedError) return
+    reportedError = true
+    onError(message)
+  }
 
-    const decoder = new TextDecoder()
-    let buffer = ''
+  void (async () => {
+    try {
+      const res = await fetch(`${BASE}/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        body: JSON.stringify({ message, thread_id: threadId, intent }),
+        signal: controller.signal,
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        reportError(data.detail || data.message || '消息发送失败')
+        return
+      }
+      const convId = res.headers.get('X-Conversation-Id')
+      const reader = res.body?.getReader()
+      if (!reader) {
+        reportError('服务器未返回有效响应')
+        return
+      }
 
+      const decoder = new TextDecoder()
+      let buffer = ''
       let currentEvent = ''
       let receivedFinal = false
       let receivedError = false
 
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-      buffer += decoder.decode(value, { stream: true })
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
 
-      const lines = buffer.split('\n')
-      buffer = lines.pop() || ''
+        const lines = buffer.split('\n')
+        buffer = lines.pop() || ''
 
-      for (const line of lines) {
-        if (line.startsWith('event: ')) {
-          currentEvent = line.slice(7).trim()
-        } else if (line.startsWith('data: ')) {
-          try {
-            const data = JSON.parse(line.slice(6))
-            const ev = currentEvent
-            currentEvent = ''
+        for (const line of lines) {
+          if (line.startsWith('event: ')) {
+            currentEvent = line.slice(7).trim()
+          } else if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6))
+              const ev = currentEvent
+              currentEvent = ''
 
-            if (ev === 'node_update') {
-              onNode(data.node, data.message)
-            } else if (ev === 'token') {
-              onToken(data.content)
-            } else if (ev === 'citation') {
-              onCitation(data as Citation)
-            } else if (ev === 'final') {
-              receivedFinal = true
-              onFinal({ ...data, conversation_id: convId })
+              if (ev === 'node_update') {
+                onNode(data.node, data.message)
+              } else if (ev === 'token') {
+                onToken(data.content)
+              } else if (ev === 'citation') {
+                onCitation(data as Citation)
+              } else if (ev === 'final') {
+                receivedFinal = true
+                onFinal({ ...data, conversation_id: convId })
               } else if (ev === 'error') {
                 receivedError = true
-                onError(data.message)
-            }
-          } catch { /* partial chunk */ }
+                reportError(data.message)
+              }
+            } catch { /* partial chunk */ }
+          }
         }
       }
+      if (!receivedFinal && !receivedError) reportError('服务器提前结束了响应，请重试')
+    } catch (err) {
+      if (!timeoutTriggered && (err as { name?: string }).name !== 'AbortError') {
+        reportError((err as Error).message || '消息发送失败')
+      }
+    } finally {
+      window.clearTimeout(timeoutId)
     }
-      if (!receivedFinal && !receivedError) onError('服务器提前结束了响应，请重试')
-  }).catch(err => {
-    if (err.name !== 'AbortError') {
-      onError(err.message)
-    }
-  })
+  })()
 
   return controller
 }

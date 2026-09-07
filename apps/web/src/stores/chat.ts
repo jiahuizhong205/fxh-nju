@@ -88,6 +88,8 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   function newChat() {
+    // ChatView 挂载、路由切换与发送极接近时，不能清掉已显示的提问。
+    if (streaming.value) return
     currentConvId.value = null
     messages.value = []
     streamContent.value = ''

@@ -48,6 +48,7 @@ class AgentResilienceTests(unittest.TestCase):
     def test_frontend_exposes_stream_failure_and_recovers_stale_route_assets(self) -> None:
         chat = (self.ROOT / "apps/web/src/views/ChatView.vue").read_text(encoding="utf-8")
         client = (self.ROOT / "apps/web/src/api/client.ts").read_text(encoding="utf-8")
+        store = (self.ROOT / "apps/web/src/stores/chat.ts").read_text(encoding="utf-8")
         app = (self.ROOT / "apps/web/src/App.vue").read_text(encoding="utf-8")
         nginx = (self.ROOT / "infra/nginx/fuxiaohe.conf").read_text(encoding="utf-8")
 
@@ -55,6 +56,9 @@ class AgentResilienceTests(unittest.TestCase):
         self.assertIn("重试", chat)
         self.assertIn("receivedError = true", client)
         self.assertIn("!receivedFinal && !receivedError", client)
+        self.assertIn("CLIENT_STREAM_TIMEOUT_MS", client)
+        self.assertIn("controller.abort()", client)
+        self.assertIn("if (streaming.value) return", store)
         self.assertIn("vite:preloadError", app)
         self.assertIn("location ^~ /assets/", nginx)
         self.assertIn("try_files $uri =404", nginx)
