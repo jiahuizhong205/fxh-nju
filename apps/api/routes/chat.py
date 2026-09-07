@@ -1,5 +1,6 @@
 """对话 API——SSE 流式响应。"""
 
+import asyncio
 import json
 import logging
 from uuid import uuid4, UUID
@@ -18,6 +19,14 @@ from services.security.input_guard import detect_injection
 
 router = APIRouter()
 logger = logging.getLogger("fuxiaohe.chat")
+
+
+async def invoke_graph_with_timeout(graph, state, config):
+    """为整条智能体链路设置边界，避免 SSE 无期限挂起。"""
+    return await asyncio.wait_for(
+        graph.ainvoke(state, config),
+        timeout=settings.agent_response_timeout_seconds,
+    )
 
 
 def _mock_result(query: str, intent: str, knowledge_context: dict | None = None) -> dict:
@@ -73,7 +82,12 @@ async def _stream_answer(
                 "intent": intent,
                 "knowledge_context": knowledge_context or {},
             }
-            result = await graph.ainvoke(state, config)
+            yield f"event: node_update\ndata: {json.dumps({'node': 'generate', 'status': 'running', 'message': '正在根据政策原文生成回答...'}, ensure_ascii=False)}\n\n"
+            result = await invoke_graph_with_timeout(graph, state, config)
+    except asyncio.TimeoutError:
+        logger.warning("chat generation timed out after %ss", settings.agent_response_timeout_seconds)
+        yield f"event: error\ndata: {json.dumps({'message': '本次回答耗时过长，请稍后重试或缩短问题后再试'}, ensure_ascii=False)}\n\n"
+        return
     except Exception:
         logger.exception("chat generation failed")
         yield f"event: error\ndata: {json.dumps({'message': '模型服务暂不可用，请稍后重试'}, ensure_ascii=False)}\n\n"

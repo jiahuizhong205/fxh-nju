@@ -74,8 +74,9 @@ export function sendMessage(
     const decoder = new TextDecoder()
     let buffer = ''
 
-    let currentEvent = ''
-    let receivedFinal = false
+      let currentEvent = ''
+      let receivedFinal = false
+      let receivedError = false
 
     while (true) {
       const { done, value } = await reader.read()
@@ -103,14 +104,15 @@ export function sendMessage(
             } else if (ev === 'final') {
               receivedFinal = true
               onFinal({ ...data, conversation_id: convId })
-            } else if (ev === 'error') {
-              onError(data.message)
+              } else if (ev === 'error') {
+                receivedError = true
+                onError(data.message)
             }
           } catch { /* partial chunk */ }
         }
       }
     }
-    if (!receivedFinal) onError('服务器提前结束了响应，请重试')
+      if (!receivedFinal && !receivedError) onError('服务器提前结束了响应，请重试')
   }).catch(err => {
     if (err.name !== 'AbortError') {
       onError(err.message)

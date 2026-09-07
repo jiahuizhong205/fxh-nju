@@ -76,9 +76,11 @@ docker compose --env-file .env -f infra/compose/docker-compose.yml up -d --build
 ```bash
 docker compose --env-file .env -f infra/compose/docker-compose.yml exec -T api python scripts/seed_real_policy.py
 docker compose --env-file .env -f infra/compose/docker-compose.yml exec -T api python scripts/sync_official_minor_data.py
+docker compose --env-file .env -f infra/compose/docker-compose.yml exec -T api python scripts/import_policy_sources.py
 ```
 
 第二条命令会从南京大学本科生院官方链接下载 2025 版培养方案；服务器无法访问该链接时，先自行下载 PDF，再将文件传入容器并使用 `--pdf /path/to/file.pdf`。
+第三条命令导入仓库内经审核的 2025 学生手册正文，并保留 2024 版为不可默认检索的历史档案；来源和去重依据见 [政策知识库来源清单](docs/policy-source-inventory.md)。
 
 ### 可选：启动通知 worker
 
@@ -122,6 +124,8 @@ Docker Compose 已包含同一个 `notification-worker` 服务；如需接入自
 |------|------|-------------|
 | `MOCK_LLM` | 开启真实模式 | `false` |
 | `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` | 聊天 API 地址、密钥、模型名 | 使用供应商给出的 OpenAI 兼容值 |
+| `LLM_MAX_TOKENS` | 单次回答最大输出长度 | 默认 `600`，保持政策答复简洁并缩短等待 |
+| `AGENT_RESPONSE_TIMEOUT_SECONDS` | 一次智能体请求的总时限 | 默认 `75`，必须小于 Nginx 的 `120` 秒读超时 |
 | `EMBEDDING_BASE_URL` / `EMBEDDING_API_KEY` / `EMBEDDING_API_MODEL` | 向量 API 地址、密钥、模型名 | 可与聊天 API 独立 |
 | `EMBEDDING_DIMENSION` | 数据库向量长度 | 固定为 `1024`，不可随意修改 |
 | `EMBEDDING_API_DIMENSIONS` | 可选地传给兼容 API 的 `dimensions` 参数 | 供应商支持降维时填写 `1024`；不支持则填 `0` 并选择原生 1024 维模型 |

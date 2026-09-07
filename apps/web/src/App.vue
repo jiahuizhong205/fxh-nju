@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { onMounted } from 'vue'
 import { RouterView, useRoute } from 'vue-router'
 
 const route = useRoute()
@@ -13,6 +14,15 @@ const tabs = [
 function isActive(path: string) {
   return path === '/' ? route.path === '/' : route.path.startsWith(path)
 }
+
+onMounted(() => {
+  window.addEventListener('vite:preloadError', () => {
+    const reloadKey = 'fuxiaohe:route-asset-reloaded'
+    if (sessionStorage.getItem(reloadKey)) return
+    sessionStorage.setItem(reloadKey, '1')
+    window.location.reload()
+  })
+})
 </script>
 
 <template>

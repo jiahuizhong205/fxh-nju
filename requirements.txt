@@ -14,5 +14,6 @@ openai==2.54.0
 httpx==0.28.1
 python-multipart==0.0.20
 pypdf==6.10.0
+PyMuPDF==1.28.0
 orjson==3.10.13
 tenacity==9.0.0

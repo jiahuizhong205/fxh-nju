@@ -18,6 +18,7 @@ export const useChatStore = defineStore('chat', () => {
   const streamCitations = ref<Citation[]>([])
   const statusText = ref('')
   const error = ref('')
+  const lastFailedMessage = ref('')
 
   let controller: AbortController | null = null
 
@@ -34,6 +35,7 @@ export const useChatStore = defineStore('chat', () => {
     if (!msg.trim() || streaming.value) return
 
     error.value = ''
+    lastFailedMessage.value = ''
     streamContent.value = ''
     streamCitations.value = []
     streaming.value = true
@@ -72,6 +74,7 @@ export const useChatStore = defineStore('chat', () => {
       },
       (err) => {
         error.value = err
+        lastFailedMessage.value = msg
         streaming.value = false
         statusText.value = ''
       },
@@ -89,11 +92,17 @@ export const useChatStore = defineStore('chat', () => {
     messages.value = []
     streamContent.value = ''
     streamCitations.value = []
+    error.value = ''
+    lastFailedMessage.value = ''
+  }
+
+  function retry() {
+    if (lastFailedMessage.value) send(lastFailedMessage.value)
   }
 
   return {
     conversations, messages, currentConvId, streaming,
-    streamContent, streamCitations, statusText, error,
-    loadConversations, loadMessages, send, cancel, newChat,
+    streamContent, streamCitations, statusText, error, lastFailedMessage,
+    loadConversations, loadMessages, send, cancel, newChat, retry,
   }
 })
