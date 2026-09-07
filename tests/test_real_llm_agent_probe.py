@@ -14,6 +14,12 @@ class RealLlmAgentProbeTests(unittest.TestCase):
         self.assertIn("delete(User)", source)
         self.assertIn('parser.add_argument("--intent"', source)
 
+    def test_probe_reports_sse_error_detail_or_tail_when_final_is_missing(self) -> None:
+        source = (Path(__file__).parents[1] / "scripts/verify_real_llm_agents.py").read_text(encoding="utf-8")
+
+        self.assertIn("SSE末尾", source)
+        self.assertIn("错误事件：", source)
+
 
 if __name__ == "__main__":
     unittest.main()

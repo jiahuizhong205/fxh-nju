@@ -11,10 +11,12 @@ class ProductionDeploymentConfigTests(unittest.TestCase):
 
         self.assertIn("Dockerfile.web.prod", compose)
         self.assertIn("PYTHONPATH: /app", compose)
-        self.assertIn('"127.0.0.1:${APP_PORT:-8080}:80"', compose)
+        self.assertIn('"${WEB_BIND_ADDRESS:-127.0.0.1}:${APP_PORT:-8080}:80"', compose)
         self.assertNotIn('"5432:5432"', compose)
         self.assertNotIn('"6379:6379"', compose)
         self.assertIn("condition: service_healthy", compose)
+        self.assertIn("PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}", compose)
+        self.assertIn("PIP_DEFAULT_TIMEOUT: ${PIP_DEFAULT_TIMEOUT:-300}", compose)
         self.assertIn("../../scripts:/app/scripts", development_compose)
         self.assertIn("../../infra/migrations:/app/infra/migrations", development_compose)
 
@@ -40,6 +42,15 @@ class ProductionDeploymentConfigTests(unittest.TestCase):
         self.assertIn(".env.*", gitignore)
         self.assertIn("! .env.production.example".replace(" ", ""), gitignore)
         self.assertIn("LLM_API_KEY=replace_with_chat_api_key", template)
+        self.assertIn("PIP_DEFAULT_TIMEOUT=300", template)
+        self.assertIn("WEB_BIND_ADDRESS=127.0.0.1", template)
+
+    def test_api_image_allows_a_reliable_configurable_pip_download(self) -> None:
+        dockerfile = (self.ROOT / "infra/docker/Dockerfile.api").read_text(encoding="utf-8")
+
+        self.assertIn("ARG PIP_INDEX_URL=https://pypi.org/simple", dockerfile)
+        self.assertIn("--timeout \"${PIP_DEFAULT_TIMEOUT}\"", dockerfile)
+        self.assertIn("--retries \"${PIP_RETRIES}\"", dockerfile)
 
 
 if __name__ == "__main__":

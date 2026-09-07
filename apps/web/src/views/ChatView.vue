@@ -117,6 +117,10 @@ function handleNewChat() {
           <div v-if="store.streamContent" class="streaming-content">{{ store.streamContent }}</div>
           <div v-else class="typing-dots"><span></span><span></span><span></span></div>
         </div>
+        <div v-if="store.error" class="stream-error" role="alert">
+          <span>{{ store.error }}</span>
+          <button type="button" @click="store.retry">重试</button>
+        </div>
       </div>
 
       <!-- 输入区 -->
@@ -215,6 +219,8 @@ function handleNewChat() {
 .streaming-bubble { padding: var(--space-3) 0; }
 .streaming-status { font-size: var(--text-sm); color: var(--text-muted); margin-bottom: var(--space-2); }
 .streaming-content { font-size: var(--text-base); line-height: 1.6; color: var(--text-primary); }
+.stream-error { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); margin-top: var(--space-3); padding: var(--space-3); border-radius: var(--radius-md); background: var(--bg-pink-soft); color: var(--text-secondary); font-size: var(--text-sm); }
+.stream-error button { flex-shrink: 0; border: 1px solid var(--accent-purple); border-radius: var(--radius-full); background: var(--bg-surface); color: var(--accent-purple); padding: var(--space-1) var(--space-3); font: inherit; cursor: pointer; }
 
 .typing-dots { display: flex; gap: 4px; }
 .typing-dots span {

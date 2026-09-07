@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import logging
+import time
 
 from langgraph.graph import StateGraph, START, END
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,6 +13,9 @@ from apps.api.config import settings
 from services.agent_runtime.state import AssistantState
 from services.agent_runtime.llm import create_chat_model
 from services.rag.retrieval import hybrid_search, build_context, build_citations
+
+
+logger = logging.getLogger("fuxiaohe.policy")
 
 
 @dataclass
@@ -25,7 +30,12 @@ class PolicyAgent:
     async def retrieve(self, state: AssistantState) -> dict:
         """检索相关文档"""
         query = state["messages"][-1].content if state.get("messages") else ""
-        chunks = await hybrid_search(self.db, query)
+        started_at = time.monotonic()
+        chunks = await hybrid_search(self.db, query, top_k=4)
+        logger.info(
+            "policy retrieval completed chunks=%s elapsed_ms=%d",
+            len(chunks), (time.monotonic() - started_at) * 1000,
+        )
         if not chunks:
             return {"evidence": [], "warnings": ["未找到相关政策文档"]}
 
@@ -64,7 +74,7 @@ class PolicyAgent:
             "valid_from": None, "source_url": e.get("source_url", ""),
         } for e in evidence]
 
-        ctx = build_context(chunk_dicts)
+        ctx = build_context(chunk_dicts, max_tokens=1400)
 
         from langchain_core.messages import HumanMessage, SystemMessage
 
@@ -74,13 +84,18 @@ class PolicyAgent:
 1. 只使用提供的政策文档内容回答，不得编造
 2. 引用具体条款时，标注来源编号
 3. 若文档未覆盖用户问题，明确说"当前知识库未收录"，并建议官方渠道
-4. 回答简洁、条理清晰，适合本科生理解
+4. 回答简洁、条理清晰，适合本科生理解；最多 6 个要点、450 个汉字。若问题只问一个条件，先用一句话给出结论
 5. 涉及学分、证书等关键信息必须准确
 
 政策文档：
 {ctx}""")
 
+        started_at = time.monotonic()
         response = await self.llm.ainvoke([system, HumanMessage(content=query)])
+        logger.info(
+            "policy generation completed elapsed_ms=%d context_chars=%d",
+            (time.monotonic() - started_at) * 1000, len(ctx),
+        )
         citations = build_citations(chunk_dicts[:5])
         top_score = evidence[0]["score"]
 
@@ -113,39 +128,10 @@ class PolicyAgent:
             warnings.append("检索相关度较低，回答可能不准确")
             confidence = max(confidence, 0.2)
 
-        # LLM 校验引用覆盖
-        evidence_texts = "\n---\n".join(
-            f"[{i+1}] {e.get('content', '')[:300]}" for i, e in enumerate(evidence[:5])
-        )
-        from langchain_core.messages import SystemMessage
-
-        check_prompt = SystemMessage(content=f"""检查以下回答中的每条政策事实是否被提供的文档所支持。
-
-证据文档：
-{evidence_texts}
-
-回答：
-{content}
-
-判断规则：
-- 若所有关键事实（学分、证书、流程等）均被至少一条证据覆盖 → covered
-- 若存在无法从证据中验证的事实 → uncoverable
-- 若证据不足但仍回复了部分合理推断 → partial
-
-只回复: covered, partial, 或 uncoverable，以及一句话原因。""")
-
-        try:
-            check_resp = await self.llm.ainvoke([check_prompt])
-            verdict = check_resp.content.lower()
-
-            if "uncoverable" in verdict:
-                warnings.append("部分回答内容无法从知识库验证")
-                confidence = min(confidence, 0.4)
-            elif "partial" in verdict:
-                warnings.append("部分内容为合理推断，非直接引用")
-                confidence = min(confidence, 0.6)
-        except Exception:
-            pass  # 校验失败不影响回答
+        # 引用由 generate() 使用同一批检索证据生成，校验阶段只做确定性判断。
+        # 原先这里再次调用 LLM，会把一次政策问答变成两次串行推理，在慢模型或冷启动
+        # 时经常超过 SSE/Nginx 的请求时限，造成前端一直“思考”。
+        # 事实级人工审核仍可通过 citations 回溯原文，低相关度则明确提示用户。
 
         return {
             "confidence": confidence,

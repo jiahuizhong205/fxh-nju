@@ -2,6 +2,7 @@
 
 import hashlib
 import re
+from datetime import datetime
 from uuid import uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -68,9 +69,11 @@ async def ingest_document(
     content: str,
     trust_level: str = "A",
     source_type: str = "policy",
-    valid_from: str | None = None,
-    valid_to: str | None = None,
+    valid_from: datetime | None = None,
+    valid_to: datetime | None = None,
     source_url: str = "",
+    raw_path: str = "",
+    is_active: bool = True,
 ) -> Document:
     file_hash = hashlib.sha256(content.encode()).hexdigest()
 
@@ -84,10 +87,11 @@ async def ingest_document(
         source_type=source_type,
         trust_level=trust_level,
         file_hash=file_hash,
-        raw_path=f"minio://raw/{title}",
+        raw_path=raw_path or f"minio://raw/{title}",
         source_url=source_url,
         valid_from=valid_from,
         valid_to=valid_to,
+        is_active=is_active,
     )
     db.add(doc)
     await db.flush()

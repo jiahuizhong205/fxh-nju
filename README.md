@@ -26,6 +26,21 @@
 | 职业方向探索 | 复合背景岗位匹配，简历优化建议 | ✅ |
 | 账号体系 | 用户名+密码注册登录，每用户独立画像 | ✅ |
 
+## 当前交接状态
+
+截至 `dev` 分支当前版本，完整的新用户体验路径为：注册 → 两阶段引导与画像填写（支持真实专业目录和头像）→ 首页 → 专业推荐 / 课程规划 / 政策答疑 / 伴学 / 职业探索。所有页面共用返回逻辑，聊天会先显示用户消息，再以 SSE 显示检索与回答状态。
+
+已完成的关键实现如下：
+
+- 真实账号、用户画像、头像上传与回读；首次使用可跳过非必填项并直接进入首页。
+- 81 个南京大学辅修专业、1229 条培养方案课程条目，以及课程冲突、校区与时间偏好规则。
+- 外部 OpenAI 兼容 LLM / Embedding 接入；不下载或运行本地大模型。Qwen 混合思考默认开启，单次推理和回答预算为 4096 token，整体 SSE 上限为 75 秒。
+- 政策 RAG：2021/2025 辅修培养方案、2025 学生手册、南京大学本科毕业论文（设计）规定；每条回答可返回来源片段与原始链接。
+- 对话流式容错：公网 HTTP 下不依赖 `crypto.randomUUID()`；后端超时、模型异常、会话留痕异常都会向前端结束流发送可见结果，而不会无限停留在“检索中”。
+- 设置、通知偏好、学习提醒、职业推送偏好、时间偏好、冲突处理、缓存、同步、反馈和学习进度页面已有本地持久化接口。
+
+目前仍是**可体验的 MVP**，不是正式生产系统：真实短信/邮件投递、异地登录风控、第三方云同步、文件安全扫描和对象存储仅预留 provider 接口，未配置供应商时会安全降级或保持 queued；知识树可视化、实时网页搜索和 Neo4j 图谱也尚未启用。
+
 ## 架构概览
 
 ```
@@ -56,9 +71,9 @@
 | 向量库 | PostgreSQL 16 + pgvector |
 | 向量服务 | 可配置的外部 OpenAI 兼容 Embedding API（不安装本地模型） |
 | 编排 | LangGraph StateGraph + 子图 + SSE Streaming |
-| 任务 | Celery/Dramatiq + Redis |
-| 隔离 | Docker 沙箱（代码执行/文档解析/浏览器） |
-| 图数据库 | Neo4j（知识图谱，P1 阶段） |
+| 后台任务 | Redis + 通知 / 同步 worker 脚本 |
+| 部署 | Docker Compose + Nginx 静态站点与 API 反向代理 |
+| 规划中的能力 | Neo4j 知识图谱、实时网页搜索、受隔离工具执行 |
 
 ## 本地开发
 
@@ -76,9 +91,21 @@ docker compose --env-file .env -f infra/compose/docker-compose.yml up -d --build
 ```bash
 docker compose --env-file .env -f infra/compose/docker-compose.yml exec -T api python scripts/seed_real_policy.py
 docker compose --env-file .env -f infra/compose/docker-compose.yml exec -T api python scripts/sync_official_minor_data.py
+docker compose --env-file .env -f infra/compose/docker-compose.yml exec -T api python scripts/import_policy_sources.py
 ```
 
 第二条命令会从南京大学本科生院官方链接下载 2025 版培养方案；服务器无法访问该链接时，先自行下载 PDF，再将文件传入容器并使用 `--pdf /path/to/file.pdf`。
+第三条命令导入仓库内经审核的 2025 学生手册正文，并保留 2024 版为不可默认检索的历史档案；来源和去重依据见 [政策知识库来源清单](docs/policy-source-inventory.md)。
+
+日常本地验证：
+
+```bash
+# 项目根目录；完整后端回归测试（无需真实 LLM）。
+PYTHONPATH=. python -m unittest discover -s tests -p 'test_*.py'
+
+# 前端类型检查和生产构建。
+cd apps/web && npm run build
+```
 
 ### 可选：启动通知 worker
 
@@ -122,6 +149,9 @@ Docker Compose 已包含同一个 `notification-worker` 服务；如需接入自
 |------|------|-------------|
 | `MOCK_LLM` | 开启真实模式 | `false` |
 | `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` | 聊天 API 地址、密钥、模型名 | 使用供应商给出的 OpenAI 兼容值 |
+| `LLM_MAX_TOKENS` | 单次推理与回答的最大输出长度 | 默认 `4096`，为混合思考模型预留足够额度 |
+| `LLM_ENABLE_THINKING` | 是否启用混合思考模型的推理过程 | 默认 `true`；追求最低延迟时可设为 `false` |
+| `AGENT_RESPONSE_TIMEOUT_SECONDS` | 一次智能体请求的总时限 | 默认 `75`，必须小于 Nginx 的 `120` 秒读超时 |
 | `EMBEDDING_BASE_URL` / `EMBEDDING_API_KEY` / `EMBEDDING_API_MODEL` | 向量 API 地址、密钥、模型名 | 可与聊天 API 独立 |
 | `EMBEDDING_DIMENSION` | 数据库向量长度 | 固定为 `1024`，不可随意修改 |
 | `EMBEDDING_API_DIMENSIONS` | 可选地传给兼容 API 的 `dimensions` 参数 | 供应商支持降维时填写 `1024`；不支持则填 `0` 并选择原生 1024 维模型 |
@@ -162,7 +192,7 @@ docker compose --env-file .env.production -f infra/compose/docker-compose.prod.y
 ### 1. 准备服务器
 
 - 一台可运行 Docker Compose v2 的 Linux 服务器；建议至少 2 核、4 GB 内存和 20 GB 可用磁盘。
-- 域名的 A/AAAA 记录指向服务器公网 IP；防火墙仅开放 `80` 和 `443`。PostgreSQL、Redis 和 API 不应暴露到公网。
+- 正式环境推荐域名与 HTTPS；临时体验可只开放一个高位 HTTP 端口。PostgreSQL、Redis 和 API 不应暴露到公网。
 - 服务器须能通过 HTTPS 访问你的 LLM/embedding 服务；首次同步时还须能访问南京大学官方培养方案链接。
 
 ### 2. 获取代码和生产配置
@@ -178,6 +208,8 @@ chmod 600 .env.production
 
 编辑 `.env.production`：替换 `POSTGRES_PASSWORD`、LLM 和 embedding 的占位值。数据库密码请使用长随机字母数字串；该文件已被 Git 忽略，绝不要把它提交、复制到聊天记录或上传到仓库。
 
+如果服务器从官方 PyPI 下载依赖很慢或超时，可在 `.env.production` 中把 `PIP_INDEX_URL` 改为你信任的区域镜像，并保留 `PIP_DEFAULT_TIMEOUT=300`、`PIP_RETRIES=5`。这些值只用于镜像构建阶段，不会传给应用；镜像源可用性和供应链风险由服务器维护者自行确认。
+
 ### 3. 启动生产服务
 
 ```bash
@@ -186,7 +218,9 @@ docker compose --env-file .env.production -f infra/compose/docker-compose.prod.y
 docker compose --env-file .env.production -f infra/compose/docker-compose.prod.yml ps
 ```
 
-生产 Compose 使用独立数据卷、关闭热重载和源码挂载；网页容器仅绑定服务器本机的 `127.0.0.1:8080`。API 会自动创建 pgvector/pg_trgm 扩展、表和已编号迁移，通知与同步 worker 会等 API 就绪后再启动。
+生产 Compose 使用独立数据卷、关闭热重载和源码挂载；网页容器默认仅绑定服务器本机的 `127.0.0.1:8080`。API 会自动创建 pgvector/pg_trgm 扩展、表和已编号迁移，通知与同步 worker 会等 API 就绪后再启动。
+
+如仅用于临时公网体验、不绑定域名和 HTTPS，可在 `.env.production` 明确设置 `WEB_BIND_ADDRESS=0.0.0.0`，并在云安全组和系统防火墙中放行 `APP_PORT`（例如 `8080`）。此模式的登录密码和对话内容通过明文 HTTP 传输，只适合短期、非敏感测试；正式使用应保持默认值并经由 HTTPS 反向代理暴露服务。
 
 ### 4. 初始化真实数据并验收
 
@@ -200,6 +234,8 @@ docker compose --env-file .env.production -f infra/compose/docker-compose.prod.y
   exec -T api python scripts/seed_real_policy.py
 docker compose --env-file .env.production -f infra/compose/docker-compose.prod.yml \
   exec -T api python scripts/sync_official_minor_data.py
+docker compose --env-file .env.production -f infra/compose/docker-compose.prod.yml \
+  exec -T api python scripts/import_policy_sources.py
 
 # 对全部切片重建一次，随后执行 API 级新用户验收（验收账号会自动删除）。
 docker compose --env-file .env.production -f infra/compose/docker-compose.prod.yml \
@@ -225,7 +261,7 @@ your.domain.example {
 
 替换域名后重载 Caddy。网页、REST API 和 SSE 问答均从同一域名访问；容器内的 Nginx 已禁用 SSE 缓冲，流式回答不会被攒到最后才输出。
 
-### 日常更新与备份
+### 日常更新、离线更新与备份
 
 ```bash
 # 更新代码并重建；不要使用 down -v，它会删除数据库卷。
@@ -238,6 +274,50 @@ docker compose --env-file .env.production -f infra/compose/docker-compose.prod.y
 ```
 
 模型、embedding 模型或 `EMBEDDING_API_DIMENSIONS` 任一变更后，都必须先运行 `check_external_llm.py`，再运行 `reembed_documents.py`，最后确认 `/api/readiness` 返回 200。
+
+若服务器无法访问 GitHub，可在开发机生成 bundle 并上传，再在服务器合并。下面所有命令均以当前实际部署目录 `/srv/fuxiaohe` 为例；不要误在 `/root/fuxiaohe` 执行。
+
+```powershell
+# 开发机 PowerShell：将当前 dev 历史打包并上传。
+git bundle create fuxiaohe-dev.bundle dev
+scp .\fuxiaohe-dev.bundle root@YOUR_SERVER:/root/
+```
+
+```bash
+# 服务器：仅快进合并，随后按改动范围重建服务。
+cd /srv/fuxiaohe
+git fetch /root/fuxiaohe-dev.bundle dev:refs/remotes/bundle/dev
+git merge --ff-only refs/remotes/bundle/dev
+
+# 改了后端、依赖、迁移或知识库脚本：重建 API。
+docker compose --env-file .env.production -f infra/compose/docker-compose.prod.yml up -d --build api
+
+# 改了 Vue 页面、样式或前端资源：重建 Web。
+docker compose --env-file .env.production -f infra/compose/docker-compose.prod.yml up -d --build web
+
+# 新增政策正文时执行增量导入；已有来源会自动跳过。
+docker compose --env-file .env.production -f infra/compose/docker-compose.prod.yml exec -T api python scripts/import_policy_sources.py
+
+# 最后检查服务与真实模型链路。
+docker compose --env-file .env.production -f infra/compose/docker-compose.prod.yml ps
+docker compose --env-file .env.production -f infra/compose/docker-compose.prod.yml exec -T api python scripts/verify_real_llm_agents.py --intent policy
+```
+
+### 当前服务器交接参数
+
+当前临时体验服务器应使用以下运行约定，后续维护者先核对再操作：
+
+| 项目 | 当前约定 |
+|---|---|
+| 部署工作树 | `/srv/fuxiaohe` |
+| Compose 文件 | `infra/compose/docker-compose.prod.yml` |
+| 私有配置 | `/srv/fuxiaohe/.env.production`，不可提交或复制到仓库 |
+| 临时入口 | `http://SERVER_IP:8080`，Web 绑定由 `WEB_BIND_ADDRESS` / `APP_PORT` 控制 |
+| 当前分支 | `dev` |
+| 数据库与缓存 | 仅 Compose 内网可见的 PostgreSQL + pgvector、Redis 卷 |
+| 知识库变更 | 文本入库或 embedding 参数改变后，执行对应导入或 `reembed_documents.py` |
+
+遇到“页面仍是旧版本”时，先确认 `git log -1 --oneline`、`docker compose ... ps` 和 Web 容器内 `index.html` 的资源 hash；浏览器再按 `Ctrl + Shift + R` 强制刷新。遇到“检索后无回答”时，先运行 `verify_real_llm_agents.py --intent policy`，再读取 `docker compose ... logs --since 10m api`；日志会标出检索与模型生成耗时。
 
 ## 项目结构
 

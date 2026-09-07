@@ -20,6 +20,11 @@ class Settings(BaseSettings):
     llm_api_key: str = ""
     llm_timeout_seconds: float = 45.0
     llm_max_retries: int = 2
+    # 为 Qwen3.8 等混合思考模型预留推理与最终答复额度；端到端仍受 75 秒限制。
+    llm_max_tokens: int = 4096
+    llm_enable_thinking: bool = True
+    # 包含检索与生成的端到端上限；必须小于 nginx 的 120 秒读超时。
+    agent_response_timeout_seconds: float = 75.0
     chunk_size: int = 500
     chunk_overlap: int = 80
     top_k_retrieval: int = 8

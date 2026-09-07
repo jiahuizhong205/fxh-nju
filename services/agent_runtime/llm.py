@@ -18,4 +18,6 @@ def create_chat_model(temperature: float):
         temperature=temperature,
         timeout=settings.llm_timeout_seconds,
         max_retries=settings.llm_max_retries,
+        max_tokens=settings.llm_max_tokens,
+        extra_body={"enable_thinking": settings.llm_enable_thinking},
     )

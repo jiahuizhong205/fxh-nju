@@ -29,6 +29,10 @@ services:
     build:
       context: ../..
       dockerfile: infra/docker/Dockerfile.api
+      args:
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
+        PIP_DEFAULT_TIMEOUT: ${PIP_DEFAULT_TIMEOUT:-300}
+        PIP_RETRIES: ${PIP_RETRIES:-5}
     restart: unless-stopped
     command: ["uvicorn", "apps.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
     environment:
@@ -41,6 +45,9 @@ services:
       LLM_MODEL: ${LLM_MODEL:-}
       LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-45}
       LLM_MAX_RETRIES: ${LLM_MAX_RETRIES:-2}
+      LLM_MAX_TOKENS: ${LLM_MAX_TOKENS:-4096}
+      LLM_ENABLE_THINKING: ${LLM_ENABLE_THINKING:-true}
+      AGENT_RESPONSE_TIMEOUT_SECONDS: ${AGENT_RESPONSE_TIMEOUT_SECONDS:-75}
       EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL:-}
       EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
       EMBEDDING_API_MODEL: ${EMBEDDING_API_MODEL:-}
@@ -62,6 +69,10 @@ services:
     build:
       context: ../..
       dockerfile: infra/docker/Dockerfile.api
+      args:
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
+        PIP_DEFAULT_TIMEOUT: ${PIP_DEFAULT_TIMEOUT:-300}
+        PIP_RETRIES: ${PIP_RETRIES:-5}
     restart: unless-stopped
     command: ["python", "scripts/notification_worker.py"]
     environment:
@@ -77,6 +88,10 @@ services:
     build:
       context: ../..
       dockerfile: infra/docker/Dockerfile.api
+      args:
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
+        PIP_DEFAULT_TIMEOUT: ${PIP_DEFAULT_TIMEOUT:-300}
+        PIP_RETRIES: ${PIP_RETRIES:-5}
     restart: unless-stopped
     command: ["python", "scripts/sync_worker.py"]
     environment:
@@ -93,7 +108,7 @@ services:
       dockerfile: infra/docker/Dockerfile.web.prod
     restart: unless-stopped
     ports:
-      - "127.0.0.1:${APP_PORT:-8080}:80"
+      - "${WEB_BIND_ADDRESS:-127.0.0.1}:${APP_PORT:-8080}:80"
     depends_on:
       api:
         condition: service_healthy

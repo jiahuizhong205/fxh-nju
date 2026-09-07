@@ -18,8 +18,17 @@ export const useChatStore = defineStore('chat', () => {
   const streamCitations = ref<Citation[]>([])
   const statusText = ref('')
   const error = ref('')
+  const lastFailedMessage = ref('')
 
   let controller: AbortController | null = null
+
+  // crypto.randomUUID 仅在安全上下文中保证可用；公网 HTTP 临时部署时也要能发送消息。
+  function createMessageId(): string {
+    if (typeof globalThis.crypto?.randomUUID === 'function') {
+      return globalThis.crypto.randomUUID()
+    }
+    return `local-${Date.now()}-${Math.random().toString(16).slice(2)}`
+  }
 
   async function loadConversations() {
     conversations.value = await fetchConversations()
@@ -34,13 +43,14 @@ export const useChatStore = defineStore('chat', () => {
     if (!msg.trim() || streaming.value) return
 
     error.value = ''
+    lastFailedMessage.value = ''
     streamContent.value = ''
     streamCitations.value = []
     streaming.value = true
     statusText.value = '正在检索政策文档...'
 
     messages.value.push({
-      id: crypto.randomUUID(),
+      id: createMessageId(),
       role: 'user',
       content: msg,
       citations: [],
@@ -55,7 +65,7 @@ export const useChatStore = defineStore('chat', () => {
       (cit) => { streamCitations.value.push(cit) },
       (final) => {
         messages.value.push({
-          id: crypto.randomUUID(),
+          id: createMessageId(),
           role: 'assistant',
           content: final.content,
           citations: final.citations,
@@ -72,6 +82,7 @@ export const useChatStore = defineStore('chat', () => {
       },
       (err) => {
         error.value = err
+        lastFailedMessage.value = msg
         streaming.value = false
         statusText.value = ''
       },
@@ -85,15 +96,23 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   function newChat() {
+    // ChatView 挂载、路由切换与发送极接近时，不能清掉已显示的提问。
+    if (streaming.value) return
     currentConvId.value = null
     messages.value = []
     streamContent.value = ''
     streamCitations.value = []
+    error.value = ''
+    lastFailedMessage.value = ''
+  }
+
+  function retry() {
+    if (lastFailedMessage.value) send(lastFailedMessage.value)
   }
 
   return {
     conversations, messages, currentConvId, streaming,
-    streamContent, streamCitations, statusText, error,
-    loadConversations, loadMessages, send, cancel, newChat,
+    streamContent, streamCitations, statusText, error, lastFailedMessage,
+    loadConversations, loadMessages, send, cancel, newChat, retry,
   }
 })
