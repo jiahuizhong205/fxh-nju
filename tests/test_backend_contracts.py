@@ -100,10 +100,16 @@ class BackendContractTests(unittest.TestCase):
     def test_mock_llm_is_safe_by_default(self):
         self.assertTrue(config.Settings(_env_file=None).mock_llm)
 
+    def test_real_llm_keeps_thinking_with_an_adequate_output_budget(self):
+        settings = config.Settings(_env_file=None)
+        self.assertTrue(settings.llm_enable_thinking)
+        self.assertGreaterEqual(settings.llm_max_tokens, 2048)
+
     def test_compose_explicitly_defaults_to_mock(self):
         compose = Path(__file__).parents[1] / "infra" / "compose" / "docker-compose.yml"
         content = compose.read_text(encoding="utf-8")
         self.assertIn("MOCK_LLM: ${MOCK_LLM:-true}", content)
+        self.assertIn("LLM_ENABLE_THINKING: ${LLM_ENABLE_THINKING:-true}", content)
 
     def test_cors_allows_methods_used_by_account_plan_updates(self):
         main = Path(__file__).parents[1] / "apps" / "api" / "main.py"

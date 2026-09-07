@@ -41,6 +41,11 @@ class AgentResilienceTests(unittest.TestCase):
         self.assertEqual(llm.calls, 0)
         self.assertEqual(result["confidence"], 0.9)
 
+    def test_external_chat_model_preserves_configured_thinking_mode(self) -> None:
+        source = (self.ROOT / "services/agent_runtime/llm.py").read_text(encoding="utf-8")
+
+        self.assertIn('extra_body={"enable_thinking": settings.llm_enable_thinking}', source)
+
     def test_agent_invocation_has_a_total_timeout(self) -> None:
         with patch("apps.api.routes.chat.settings.agent_response_timeout_seconds", 0.001):
             with self.assertRaises(asyncio.TimeoutError):
