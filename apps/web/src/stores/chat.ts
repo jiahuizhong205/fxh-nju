@@ -22,6 +22,14 @@ export const useChatStore = defineStore('chat', () => {
 
   let controller: AbortController | null = null
 
+  // crypto.randomUUID 仅在安全上下文中保证可用；公网 HTTP 临时部署时也要能发送消息。
+  function createMessageId(): string {
+    if (typeof globalThis.crypto?.randomUUID === 'function') {
+      return globalThis.crypto.randomUUID()
+    }
+    return `local-${Date.now()}-${Math.random().toString(16).slice(2)}`
+  }
+
   async function loadConversations() {
     conversations.value = await fetchConversations()
   }
@@ -42,7 +50,7 @@ export const useChatStore = defineStore('chat', () => {
     statusText.value = '正在检索政策文档...'
 
     messages.value.push({
-      id: crypto.randomUUID(),
+      id: createMessageId(),
       role: 'user',
       content: msg,
       citations: [],
@@ -57,7 +65,7 @@ export const useChatStore = defineStore('chat', () => {
       (cit) => { streamCitations.value.push(cit) },
       (final) => {
         messages.value.push({
-          id: crypto.randomUUID(),
+          id: createMessageId(),
           role: 'assistant',
           content: final.content,
           citations: final.citations,
