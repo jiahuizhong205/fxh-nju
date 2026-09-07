@@ -124,7 +124,7 @@ Docker Compose 已包含同一个 `notification-worker` 服务；如需接入自
 |------|------|-------------|
 | `MOCK_LLM` | 开启真实模式 | `false` |
 | `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` | 聊天 API 地址、密钥、模型名 | 使用供应商给出的 OpenAI 兼容值 |
-| `LLM_MAX_TOKENS` | 单次推理与回答的最大输出长度 | 默认 `2048`，为混合思考模型预留足够额度 |
+| `LLM_MAX_TOKENS` | 单次推理与回答的最大输出长度 | 默认 `4096`，为混合思考模型预留足够额度 |
 | `LLM_ENABLE_THINKING` | 是否启用混合思考模型的推理过程 | 默认 `true`；追求最低延迟时可设为 `false` |
 | `AGENT_RESPONSE_TIMEOUT_SECONDS` | 一次智能体请求的总时限 | 默认 `75`，必须小于 Nginx 的 `120` 秒读超时 |
 | `EMBEDDING_BASE_URL` / `EMBEDDING_API_KEY` / `EMBEDDING_API_MODEL` | 向量 API 地址、密钥、模型名 | 可与聊天 API 独立 |

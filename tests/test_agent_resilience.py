@@ -97,6 +97,7 @@ class AgentResilienceTests(unittest.TestCase):
         source = (self.ROOT / "scripts/import_policy_sources.py").read_text(encoding="utf-8")
 
         self.assertIn("南京大学2025版学生手册（本科生部分）", source)
+        self.assertIn("南京大学关于本科毕业论文（设计）工作的若干规定（2019年8月修订）", source)
         self.assertIn("南京大学2024学生手册（本科生部分）", source)
         self.assertIn('"is_active": False', source)
         self.assertIn("PyMuPDF", (self.ROOT / "requirements.txt").read_text(encoding="utf-8"))

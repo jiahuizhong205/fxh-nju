@@ -103,7 +103,7 @@ class BackendContractTests(unittest.TestCase):
     def test_real_llm_keeps_thinking_with_an_adequate_output_budget(self):
         settings = config.Settings(_env_file=None)
         self.assertTrue(settings.llm_enable_thinking)
-        self.assertGreaterEqual(settings.llm_max_tokens, 2048)
+        self.assertGreaterEqual(settings.llm_max_tokens, 4096)
 
     def test_compose_explicitly_defaults_to_mock(self):
         compose = Path(__file__).parents[1] / "infra" / "compose" / "docker-compose.yml"
