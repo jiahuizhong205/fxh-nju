@@ -93,45 +93,57 @@ async def _stream_answer(
         yield f"event: error\ndata: {json.dumps({'message': '模型服务暂不可用，请稍后重试'}, ensure_ascii=False)}\n\n"
         return
 
-    answer = result.get("answer", {})
-    content = answer.get("content", "") if isinstance(answer, dict) else str(answer)
-    citations = answer.get("citations", []) if isinstance(answer, dict) else []
-    confidence = result.get("confidence", 0.0)
-    warnings = result.get("warnings", [])
+    try:
+        answer = result.get("answer", {})
+        content = answer.get("content", "") if isinstance(answer, dict) else str(answer)
+        citations = answer.get("citations", []) if isinstance(answer, dict) else []
+        confidence = result.get("confidence", 0.0)
+        warnings = list(result.get("warnings", []) or [])
 
-    # node_update: 检索完成
-    yield f"event: node_update\ndata: {json.dumps({'node': 'retrieve', 'status': 'completed', 'message': f'检索到 {len(citations)} 条相关文档'}, ensure_ascii=False)}\n\n"
+        # node_update: 检索完成
+        yield f"event: node_update\ndata: {json.dumps({'node': 'retrieve', 'status': 'completed', 'message': f'检索到 {len(citations)} 条相关文档'}, ensure_ascii=False)}\n\n"
 
-    # token: 逐段输出（简化：整段输出）
-    yield f"event: token\ndata: {json.dumps({'content': content}, ensure_ascii=False)}\n\n"
+        # token: 逐段输出（简化：整段输出）
+        yield f"event: token\ndata: {json.dumps({'content': content}, ensure_ascii=False)}\n\n"
 
-    # citation
-    for cit in citations:
-        yield f"event: citation\ndata: {json.dumps(cit, ensure_ascii=False)}\n\n"
+        # citation
+        for cit in citations:
+            yield f"event: citation\ndata: {json.dumps(cit, ensure_ascii=False)}\n\n"
 
-    # 保存 assistant 消息
-    msg = Message(
-        conversation_id=conversation_id,
-        role="assistant",
-        content=content,
-        citations=citations,
-    )
-    db.add(msg)
-    await db.execute(
-        update(Conversation)
-        .where(Conversation.id == conversation_id)
-        .values(updated_at=utcnow())
-    )
-    await db.commit()
+        # 会话留痕不应影响已经生成的回答。否则持久化异常会让 SSE 无 final 事件，
+        # 前端只能一直停留在“正在检索”。
+        try:
+            msg = Message(
+                conversation_id=conversation_id,
+                role="assistant",
+                content=content,
+                citations=citations,
+            )
+            db.add(msg)
+            await db.execute(
+                update(Conversation)
+                .where(Conversation.id == conversation_id)
+                .values(updated_at=utcnow())
+            )
+            await db.commit()
+        except Exception:
+            logger.exception("chat answer persistence failed")
+            try:
+                await db.rollback()
+            except Exception:
+                logger.exception("chat answer persistence rollback failed")
+            warnings.append("本次回答未能写入会话历史，请稍后重试")
 
-    # final
-    final = {
-        "content": content,
-        "citations": citations,
-        "confidence": confidence,
-        "warnings": warnings,
-    }
-    yield f"event: final\ndata: {json.dumps(final, ensure_ascii=False)}\n\n"
+        final = {
+            "content": content,
+            "citations": citations,
+            "confidence": confidence,
+            "warnings": warnings,
+        }
+        yield f"event: final\ndata: {json.dumps(final, ensure_ascii=False)}\n\n"
+    except Exception:
+        logger.exception("chat response finalization failed")
+        yield f"event: error\ndata: {json.dumps({'message': '回答已生成但传输失败，请稍后重试'}, ensure_ascii=False)}\n\n"
 
 
 @router.post("/chat")

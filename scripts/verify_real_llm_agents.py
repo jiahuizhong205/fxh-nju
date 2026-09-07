@@ -32,15 +32,17 @@ def response_json(response: httpx.Response, step: str) -> dict:
 
 
 def final_content(sse_body: str, intent: str) -> str:
-    if "event: error" in sse_body:
-        raise AssertionError(f"{intent} 智能体返回错误事件")
     lines = sse_body.splitlines()
     for index, line in enumerate(lines):
+        if line == "event: error" and index + 1 < len(lines) and lines[index + 1].startswith("data: "):
+            payload = json.loads(lines[index + 1][6:])
+            raise AssertionError(f"{intent} 智能体返回错误事件：{payload.get('message', '未提供详情')}")
         if line == "event: final" and index + 1 < len(lines) and lines[index + 1].startswith("data: "):
             content = json.loads(lines[index + 1][6:]).get("content", "").strip()
             if content and "模型服务暂不可用" not in content:
                 return content
-    raise AssertionError(f"{intent} 智能体未返回有效最终内容")
+    tail = " ".join(sse_body.split())[-1000:]
+    raise AssertionError(f"{intent} 智能体未返回有效最终内容；SSE末尾：{tail or '（空响应）'}")
 
 
 async def insert_test_job(job_id: str) -> None:

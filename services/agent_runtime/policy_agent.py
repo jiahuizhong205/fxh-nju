@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import logging
+import time
 
 from langgraph.graph import StateGraph, START, END
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,6 +13,9 @@ from apps.api.config import settings
 from services.agent_runtime.state import AssistantState
 from services.agent_runtime.llm import create_chat_model
 from services.rag.retrieval import hybrid_search, build_context, build_citations
+
+
+logger = logging.getLogger("fuxiaohe.policy")
 
 
 @dataclass
@@ -25,7 +30,12 @@ class PolicyAgent:
     async def retrieve(self, state: AssistantState) -> dict:
         """检索相关文档"""
         query = state["messages"][-1].content if state.get("messages") else ""
-        chunks = await hybrid_search(self.db, query)
+        started_at = time.monotonic()
+        chunks = await hybrid_search(self.db, query, top_k=4)
+        logger.info(
+            "policy retrieval completed chunks=%s elapsed_ms=%d",
+            len(chunks), (time.monotonic() - started_at) * 1000,
+        )
         if not chunks:
             return {"evidence": [], "warnings": ["未找到相关政策文档"]}
 
@@ -64,7 +74,7 @@ class PolicyAgent:
             "valid_from": None, "source_url": e.get("source_url", ""),
         } for e in evidence]
 
-        ctx = build_context(chunk_dicts)
+        ctx = build_context(chunk_dicts, max_tokens=1400)
 
         from langchain_core.messages import HumanMessage, SystemMessage
 
@@ -74,13 +84,18 @@ class PolicyAgent:
 1. 只使用提供的政策文档内容回答，不得编造
 2. 引用具体条款时，标注来源编号
 3. 若文档未覆盖用户问题，明确说"当前知识库未收录"，并建议官方渠道
-4. 回答简洁、条理清晰，适合本科生理解
+4. 回答简洁、条理清晰，适合本科生理解；最多 6 个要点、450 个汉字。若问题只问一个条件，先用一句话给出结论
 5. 涉及学分、证书等关键信息必须准确
 
 政策文档：
 {ctx}""")
 
+        started_at = time.monotonic()
         response = await self.llm.ainvoke([system, HumanMessage(content=query)])
+        logger.info(
+            "policy generation completed elapsed_ms=%d context_chars=%d",
+            (time.monotonic() - started_at) * 1000, len(ctx),
+        )
         citations = build_citations(chunk_dicts[:5])
         top_score = evidence[0]["score"]
 

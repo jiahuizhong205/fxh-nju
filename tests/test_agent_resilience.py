@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 from apps.api.routes.chat import invoke_graph_with_timeout
 from services.agent_runtime.policy_agent import PolicyAgent
+from services.rag.retrieval import build_context
 
 
 class _NeverCalledLlm:
@@ -44,6 +45,26 @@ class AgentResilienceTests(unittest.TestCase):
         with patch("apps.api.routes.chat.settings.agent_response_timeout_seconds", 0.001):
             with self.assertRaises(asyncio.TimeoutError):
                 asyncio.run(invoke_graph_with_timeout(_SlowGraph(), {}, {}))
+
+    def test_policy_context_is_bounded_before_model_generation(self) -> None:
+        chunks = [{
+            "document_title": "测试政策",
+            "content": "政策原文" * 2_000,
+        } for _ in range(4)]
+
+        context = build_context(chunks, max_tokens=100)
+
+        # 中文通常接近一字一 token；这里使用两倍字符预算，既保留来源标签，
+        # 又避免多份长文档被整体塞入一次模型请求。
+        self.assertLessEqual(len(context), 200)
+        self.assertIn("【来源1】测试政策", context)
+
+    def test_chat_finalizes_when_history_persistence_fails(self) -> None:
+        source = (self.ROOT / "apps/api/routes/chat.py").read_text(encoding="utf-8")
+
+        self.assertIn("chat answer persistence failed", source)
+        self.assertIn("await db.rollback()", source)
+        self.assertIn("event: final", source)
 
     def test_frontend_exposes_stream_failure_and_recovers_stale_route_assets(self) -> None:
         chat = (self.ROOT / "apps/web/src/views/ChatView.vue").read_text(encoding="utf-8")

@@ -130,8 +130,19 @@ def build_citations(chunks: list[dict]) -> list[dict]:
 
 
 def build_context(chunks: list[dict], max_tokens: int = 3000) -> str:
-    parts = []
+    """组装有来源标签的模型上下文，并限制输入规模。"""
+    # 中文模型的 token 数通常与字符数接近；两倍预算为中英文混合内容留出余量。
+    character_budget = max(1, max_tokens * 2)
+    parts: list[str] = []
+    used = 0
     for i, c in enumerate(chunks):
         label = c["document_title"]
-        parts.append(f"【来源{i+1}】{label}\n{c['content']}")
+        prefix = f"【来源{i+1}】{label}\n"
+        separator_size = 2 if parts else 0
+        remaining = character_budget - used - separator_size
+        if remaining <= len(prefix):
+            break
+        content = str(c["content"])[:remaining - len(prefix)]
+        parts.append(f"{prefix}{content}")
+        used += separator_size + len(prefix) + len(content)
     return "\n\n".join(parts)
