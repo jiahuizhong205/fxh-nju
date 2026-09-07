@@ -188,7 +188,9 @@ docker compose --env-file .env.production -f infra/compose/docker-compose.prod.y
 docker compose --env-file .env.production -f infra/compose/docker-compose.prod.yml ps
 ```
 
-生产 Compose 使用独立数据卷、关闭热重载和源码挂载；网页容器仅绑定服务器本机的 `127.0.0.1:8080`。API 会自动创建 pgvector/pg_trgm 扩展、表和已编号迁移，通知与同步 worker 会等 API 就绪后再启动。
+生产 Compose 使用独立数据卷、关闭热重载和源码挂载；网页容器默认仅绑定服务器本机的 `127.0.0.1:8080`。API 会自动创建 pgvector/pg_trgm 扩展、表和已编号迁移，通知与同步 worker 会等 API 就绪后再启动。
+
+如仅用于临时公网体验、不绑定域名和 HTTPS，可在 `.env.production` 明确设置 `WEB_BIND_ADDRESS=0.0.0.0`，并在云安全组和系统防火墙中放行 `APP_PORT`（例如 `8080`）。此模式的登录密码和对话内容通过明文 HTTP 传输，只适合短期、非敏感测试；正式使用应保持默认值并经由 HTTPS 反向代理暴露服务。
 
 ### 4. 初始化真实数据并验收
 
