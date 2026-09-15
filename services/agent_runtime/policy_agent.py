@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.api.config import settings
 from services.agent_runtime.state import AssistantState
-from services.agent_runtime.llm import create_chat_model
+from services.agent_runtime.llm import build_contextual_prompt, create_chat_model, stream_chat_text
 from services.rag.retrieval import hybrid_search, build_context, build_citations
 
 
@@ -76,7 +76,7 @@ class PolicyAgent:
 
         ctx = build_context(chunk_dicts, max_tokens=1400)
 
-        from langchain_core.messages import HumanMessage, SystemMessage
+        from langchain_core.messages import SystemMessage
 
         system = SystemMessage(content=f"""你是南京大学辅修政策答疑助手"福小禾"。请根据以下政策文档回答用户问题。
 
@@ -91,7 +91,17 @@ class PolicyAgent:
 {ctx}""")
 
         started_at = time.monotonic()
-        response = await self.llm.ainvoke([system, HumanMessage(content=query)])
+        content = await stream_chat_text(
+            self.llm,
+            build_contextual_prompt(
+                system,
+                messages,
+                query,
+                conversation_summary=state.get("conversation_summary", ""),
+                memory_context=state.get("memory_context", ""),
+            ),
+            state.get("token_sink"),
+        )
         logger.info(
             "policy generation completed elapsed_ms=%d context_chars=%d",
             (time.monotonic() - started_at) * 1000, len(ctx),
@@ -101,7 +111,7 @@ class PolicyAgent:
 
         return {
             "answer": {
-                "content": response.content,
+                "content": content,
                 "citations": citations,
                 "confidence": top_score,
             },

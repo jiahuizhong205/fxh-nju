@@ -58,3 +58,102 @@ class FrontendUserJourneyContractTests(unittest.TestCase):
         self.assertNotIn("120 天", profile)
         self.assertIn("fetchFavoriteJobIds()", career)
         self.assertNotIn("fxh_favorite_jobs", client)
+
+    def test_memory_settings_route_entry_and_typed_client_contract_exist(self):
+        router = (ROOT / "apps/web/src/router/index.ts").read_text(encoding="utf-8")
+        settings = (ROOT / "apps/web/src/views/SettingsView.vue").read_text(encoding="utf-8")
+        client = (ROOT / "apps/web/src/api/client.ts").read_text(encoding="utf-8")
+
+        self.assertIn("/settings/memory", router)
+        self.assertIn("MemorySettingsView.vue", router)
+        self.assertIn("我的记忆", settings)
+        self.assertIn("export type MemoryCategory", client)
+        self.assertIn("export interface MemoryPage", client)
+        self.assertIn("next_cursor: string | null", client)
+        for method in [
+            "fetchMemories",
+            "createMemory",
+            "updateMemory",
+            "deleteMemory",
+            "fetchMemoryPreferences",
+            "saveMemoryPreferences",
+        ]:
+            self.assertIn(f"export async function {method}", client)
+
+    def test_memory_settings_page_exposes_safe_accessible_states(self):
+        page = (ROOT / "apps/web/src/views/MemorySettingsView.vue").read_text(encoding="utf-8")
+        state = (ROOT / "apps/web/src/views/memorySettingsState.ts").read_text(encoding="utf-8")
+
+        for text in [
+            "自动记忆",
+            "添加记忆",
+            "编辑",
+            "删除",
+            "还没有形成长期记忆",
+            "请勿保存密码、验证码、访问令牌或其他凭证",
+            "aria-live",
+            "aria-checked",
+            "加载更多",
+            "confirm(",
+            "prefers-reduced-motion",
+            "retryPreferences",
+            ":deep(.back)",
+        ]:
+            self.assertIn(text, page)
+
+    def test_memory_settings_uses_dialog_field_errors_and_separate_pagination_recovery(self):
+        page = (ROOT / "apps/web/src/views/MemorySettingsView.vue").read_text(encoding="utf-8")
+        state = (ROOT / "apps/web/src/views/memorySettingsState.ts").read_text(encoding="utf-8")
+        client = (ROOT / "apps/web/src/api/client.ts").read_text(encoding="utf-8")
+
+        for markup in [
+            '<dialog',
+            '@cancel="onDialogCancel"',
+            '@close="onDialogClosed"',
+            'required',
+            'aria-invalid',
+            'memory-content-error',
+            '状态未知',
+            'initialListError',
+            'appendError',
+            '重试加载更多',
+            'runConfirmedMemoryDelete',
+            'if (categoryField.value)',
+            'showMemoryDialog',
+            'closeMemoryDialog',
+            'syncMemoryAfterSave',
+        ]:
+            self.assertIn(markup, page)
+        self.assertIn('showModal', state)
+        self.assertIn('dialog.close()', state)
+        self.assertIn("created_at: string", client)
+        self.assertIn("class MemoryApiError", client)
+        self.assertIn("memoryJsonResponse", client)
+
+    def test_memory_dialog_keeps_keyboard_focus_inside_and_resets_pagination_errors_after_save(self):
+        page = (ROOT / "apps/web/src/views/MemorySettingsView.vue").read_text(encoding="utf-8")
+
+        for contract in [
+            '@keydown="onDialogKeydown"',
+            'trapDialogTabFocus',
+            'restoreDialogTrigger',
+            'appendError.value = nextAppendError(false, appendError.value)',
+            '.form-card::backdrop',
+        ]:
+            self.assertIn(contract, page)
+
+    def test_memory_add_button_uses_the_list_coordinator_gate_and_save_invalidates_pending_loads(self):
+        page = (ROOT / "apps/web/src/views/MemorySettingsView.vue").read_text(encoding="utf-8")
+
+        for contract in [
+            'const listCoordinator = createMemoryListCoordinator()',
+            'const canAddMemory = computed(() => listCoordinator.canAdd(initialLoading.value, initialListError.value))',
+            ':disabled="!canAddMemory || formSaving || !!deletingId"',
+            ':aria-disabled="!canAddMemory || formSaving || !!deletingId"',
+            'listCoordinator.invalidateForSave()',
+            'const stableList = listCoordinator.stableAfterSave()',
+            'loadingMore.value = stableList.loadingMore',
+            'if (!listCoordinator.isCurrent(request)) return',
+            'if (listCoordinator.isCurrent(request)) append ? loadingMore.value = false : initialLoading.value = false',
+        ]:
+            self.assertIn(contract, page)

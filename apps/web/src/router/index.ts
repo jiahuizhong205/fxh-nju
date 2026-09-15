@@ -107,6 +107,11 @@ const router = createRouter({
       component: () => import('../views/NotificationSettingsView.vue'),
     },
     {
+      path: '/settings/memory',
+      name: 'memory-settings',
+      component: () => import('../views/MemorySettingsView.vue'),
+    },
+    {
       path: '/settings/switch-account',
       name: 'switch-account',
       component: () => import('../views/SwitchAccountView.vue'),

@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.api.database import get_db
 from apps.api.models import (
-    StudentProfile, Program, ProgramPlanItem, Course, Job, JobFavorite,
+    Program, ProgramPlanItem, Course, Job, JobFavorite,
     Notification, PlanExport, RecommendationReport, LearningPlan, JobApplication, LearningRecord, ProgramEnrollment, User, utcnow,
 )
 from apps.api.routes.auth import get_current_user
@@ -26,6 +26,7 @@ from services.planning.recommendation_engine import recommend
 from services.planning.course_planner import generate_plan
 from services.planning.career_engine import build_career_outcomes, match_jobs
 from services.planning.eligibility import evaluate_program_eligibility
+from services.planning.profile_context import load_student_profile_context
 from services.planning.schedule_conflicts import auto_select_schedule, build_schedule_options, detect_schedule_conflicts
 from services.rag.knowledge_graph import get_skill_pathways
 
@@ -66,35 +67,7 @@ class ConflictCheckRequest(BaseModel):
 
 
 async def _latest_profile(db: AsyncSession, user_id) -> dict | None:
-    result = await db.execute(
-        select(StudentProfile)
-        .where(StudentProfile.user_id == user_id)
-        .order_by(StudentProfile.updated_at.desc())
-        .limit(1)
-    )
-    p = result.scalar_one_or_none()
-    if not p:
-        return None
-    records_result = await db.execute(
-        select(LearningRecord).where(
-            LearningRecord.user_id == user_id,
-            LearningRecord.status == "completed",
-        )
-    )
-    completed_records = records_result.scalars().all()
-    return {
-        "major": p.major, "grade": p.grade, "campus": p.campus,
-        "interests": p.interests or [], "strengths": p.strengths or [],
-        "career_goals": p.career_goals,
-        "math_willingness": p.math_willingness,
-        "campus_flexibility": p.campus_flexibility,
-        "credit_budget": p.credit_budget,
-        "certificate_goal": p.certificate_goal,
-        "schedule_preferences": p.schedule_preferences or {},
-        "version": p.version,
-        "completed_courses": [record.course_name for record in completed_records],
-        "completed_credits": sum(record.credits for record in completed_records),
-    }
+    return await load_student_profile_context(db, user_id)
 
 
 async def _load_programs(db: AsyncSession) -> list[dict]:

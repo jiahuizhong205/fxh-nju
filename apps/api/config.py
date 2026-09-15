@@ -25,6 +25,14 @@ class Settings(BaseSettings):
     llm_enable_thinking: bool = True
     # 包含检索与生成的端到端上限；必须小于 nginx 的 120 秒读超时。
     agent_response_timeout_seconds: float = 75.0
+    chat_recent_turn_limit: int = 5
+    chat_context_character_budget: int = 12_000
+    chat_summary_trigger_character_count: int = 8_000
+    chat_summary_max_characters: int = 2_400
+    memory_retrieval_limit: int = 5
+    memory_context_character_budget: int = 2_000
+    memory_capture_confidence_threshold: float = 0.70
+    memory_background_timeout_seconds: float = 45.0
     chunk_size: int = 500
     chunk_overlap: int = 80
     top_k_retrieval: int = 8

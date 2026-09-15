@@ -1,3 +1,4 @@
+from collections.abc import Awaitable, Callable
 from typing import Annotated, Literal
 from typing_extensions import TypedDict
 from langgraph.graph.message import add_messages
@@ -11,6 +12,8 @@ def merge_evidence(left: list, right: list) -> list:
 class AssistantState(TypedDict, total=False):
     user_id: str
     messages: Annotated[list, add_messages]
+    conversation_summary: str
+    memory_context: str
     intent: Literal["policy", "recommend", "schedule", "tutor", "career", "multi"]
     knowledge_context: dict
     task_plan: list[dict]
@@ -22,6 +25,7 @@ class AssistantState(TypedDict, total=False):
     confidence: float
     warnings: list[str]
     pending_approval: dict | None
+    token_sink: Callable[[str], Awaitable[None]]
 
 
 class RequestContext(TypedDict):

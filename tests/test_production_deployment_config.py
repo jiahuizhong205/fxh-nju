@@ -52,6 +52,23 @@ class ProductionDeploymentConfigTests(unittest.TestCase):
         self.assertIn("--timeout \"${PIP_DEFAULT_TIMEOUT}\"", dockerfile)
         self.assertIn("--retries \"${PIP_RETRIES}\"", dockerfile)
 
+    def test_compose_passes_memory_settings_to_api_containers(self) -> None:
+        development_compose = (self.ROOT / "infra/compose/docker-compose.yml").read_text(encoding="utf-8")
+        production_compose = (self.ROOT / "infra/compose/docker-compose.prod.yml").read_text(encoding="utf-8")
+
+        for setting in (
+            "CHAT_RECENT_TURN_LIMIT",
+            "CHAT_CONTEXT_CHARACTER_BUDGET",
+            "CHAT_SUMMARY_TRIGGER_CHARACTER_COUNT",
+            "CHAT_SUMMARY_MAX_CHARACTERS",
+            "MEMORY_RETRIEVAL_LIMIT",
+            "MEMORY_CONTEXT_CHARACTER_BUDGET",
+            "MEMORY_CAPTURE_CONFIDENCE_THRESHOLD",
+            "MEMORY_BACKGROUND_TIMEOUT_SECONDS",
+        ):
+            self.assertIn(setting, development_compose)
+            self.assertIn(setting, production_compose)
+
 
 if __name__ == "__main__":
     unittest.main()

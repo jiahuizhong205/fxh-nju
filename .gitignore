@@ -15,6 +15,7 @@ dist/
 .mypy_cache/
 .DS_Store
 tmp/
+.worktrees/
 
 # local development runtime logs
 *.log

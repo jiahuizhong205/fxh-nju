@@ -1,8 +1,17 @@
 """核心逻辑验证——无需数据库、无需 LLM，纯单元级自检。"""
 
-import sys
 import asyncio
 import os
+import sys
+from datetime import datetime, timedelta
+from pathlib import Path
+from uuid import UUID
+
+
+REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+if str(REPOSITORY_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPOSITORY_ROOT))
+
 
 def test_state_merge_evidence():
     """验证 evidence reducer 去重合并逻辑。"""
@@ -110,6 +119,114 @@ def test_mock_embedding_without_local_model():
         second = retrieval.embed_text("同一段文字")
     assert first == second and len(first) == 1024
     print("  PASS test_mock_embedding_without_local_model")
+
+
+def test_complete_turn_context_trimming():
+    """验证上下文只裁掉完整轮次，不留下孤立的半轮消息。"""
+    from services.memory.conversation import MessageSnapshot, assemble_conversation_context
+
+    started = datetime(2026, 1, 1)
+    snapshots = tuple(
+        MessageSnapshot(
+            id=UUID(int=index),
+            role="user" if index % 2 else "assistant",
+            content=f"{'u' if index % 2 else 'a'}{(index + 1) // 2}",
+            created_at=started + timedelta(seconds=index),
+        )
+        for index in range(1, 7)
+    )
+    context = assemble_conversation_context(
+        snapshots,
+        summary="较早摘要",
+        recent_turn_limit=2,
+        character_budget=14,
+    )
+
+    assert [message.content for message in context.messages] == ["u2", "a2", "u3", "a3"]
+    assert [message.content for message in context.summary_candidates] == ["u1", "a1"]
+    assert len(context.messages) % 2 == 0
+    print("  PASS test_complete_turn_context_trimming")
+
+
+def test_mock_summary_without_external_model():
+    """验证 Mock 摘要确定、非空，且不构造或调用外部模型。"""
+    from services.memory.conversation import MessageSnapshot
+    from services.memory.summarizer import generate_conversation_summary
+
+    class ForbiddenModel:
+        async def ainvoke(self, _messages):
+            raise AssertionError("Mock summary must not call an external model")
+
+    messages = (
+        MessageSnapshot(UUID(int=1), "user", "我长期偏好仙林校区下午课程", datetime(2026, 1, 1)),
+        MessageSnapshot(UUID(int=2), "assistant", "已记录你的长期偏好", datetime(2026, 1, 1, 0, 0, 1)),
+    )
+    first = asyncio.run(generate_conversation_summary("", messages, mock=True, model=ForbiddenModel()))
+    second = asyncio.run(generate_conversation_summary("", messages, mock=True, model=ForbiddenModel()))
+    assert first == second
+    assert first.strip() and "仙林" in first and "下午" in first
+    print("  PASS test_mock_summary_without_external_model")
+
+
+def test_mock_memory_secret_rejection():
+    """验证明确保存请求也不能让认证秘密进入长期记忆。"""
+    from services.memory.extraction import extract_memory_candidates
+    from services.memory.security import sanitize_memory_text
+
+    secret = "请记住我的 client_secret=client-secret-value"
+    assert sanitize_memory_text(secret, explicitly_requested=True) == ""
+    assert asyncio.run(extract_memory_candidates(secret, mock=True)) == []
+    print("  PASS test_mock_memory_secret_rejection")
+
+
+def test_mock_keyword_memory_retrieval_without_embedding():
+    """验证 Mock 检索按关键词排序，并禁止 embedding 网络调用。"""
+    from unittest.mock import patch
+
+    from apps.api.models import UserMemory
+    from services.memory import retrieval
+
+    now = datetime(2026, 1, 1)
+    relevant = UserMemory(
+        id=UUID(int=1), user_id=UUID(int=10), canonical_key="study:campus",
+        category="study_constraint", content="我长期偏好仙林校区下午课程",
+        importance=0.7, confidence=1.0, created_at=now, updated_at=now,
+    )
+    unrelated = UserMemory(
+        id=UUID(int=2), user_id=UUID(int=10), canonical_key="career:goal",
+        category="career_goal", content="我的长期目标是从事内容研究",
+        importance=0.9, confidence=1.0, created_at=now, updated_at=now,
+    )
+
+    class Result:
+        def scalars(self):
+            return self
+
+        def all(self):
+            return [unrelated, relevant]
+
+    class Database:
+        async def execute(self, _statement):
+            return Result()
+
+        async def commit(self):
+            return None
+
+        async def rollback(self):
+            return None
+
+        def expunge(self, _memory):
+            return None
+
+    with (
+        patch.object(retrieval.settings, "mock_llm", True),
+        patch.object(retrieval, "embed_text", side_effect=AssertionError("Mock retrieval called embedding")),
+    ):
+        found = asyncio.run(retrieval.retrieve_relevant_memories(
+            Database(), UUID(int=10), "仙林下午", "schedule", limit=1,
+        ))
+    assert [memory.id for memory in found] == [relevant.id]
+    print("  PASS test_mock_keyword_memory_retrieval_without_embedding")
 
 
 def test_knowledge_graph_nodes():
@@ -470,6 +587,10 @@ def main():
         test_security_middleware_import,
         test_cors_config,
         test_mock_embedding_without_local_model,
+        test_complete_turn_context_trimming,
+        test_mock_summary_without_external_model,
+        test_mock_memory_secret_rejection,
+        test_mock_keyword_memory_retrieval_without_embedding,
     ]
 
     passed = 0

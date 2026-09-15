@@ -1,8 +1,9 @@
 """账号级偏好设置 API。"""
 
+import logging
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, StrictBool
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,6 +12,7 @@ from apps.api.models import User
 from apps.api.routes.auth import get_current_user
 
 router = APIRouter()
+memory_logger = logging.getLogger("fuxiaohe.memory.preferences")
 
 
 class LearningReminderPreferences(BaseModel):
@@ -40,6 +42,16 @@ class VisibilityPreferences(BaseModel):
     show_timetable: StrictBool = True
 
 
+class MemoryPreferences(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    auto_capture_enabled: StrictBool = True
+
+
+class MemoryPreferencesResponse(BaseModel):
+    preferences: MemoryPreferences
+
+
 class PreferencesData(BaseModel):
     """账号偏好的版本化 schema，保留通知页目前使用的中文标签键。"""
 
@@ -52,6 +64,7 @@ class PreferencesData(BaseModel):
     learning_reminder: LearningReminderPreferences = Field(default_factory=LearningReminderPreferences)
     job_push: JobPushPreferences = Field(default_factory=JobPushPreferences)
     visibility: VisibilityPreferences = Field(default_factory=VisibilityPreferences)
+    memory: MemoryPreferences = Field(default_factory=MemoryPreferences)
 
 
 class PreferencesUpdate(BaseModel):
@@ -62,6 +75,7 @@ _SECTION_MODELS = {
     "learning_reminder": LearningReminderPreferences,
     "job_push": JobPushPreferences,
     "visibility": VisibilityPreferences,
+    "memory": MemoryPreferences,
 }
 
 
@@ -139,3 +153,41 @@ async def save_visibility_preferences(
     db: AsyncSession = Depends(get_db),
 ):
     return {"preferences": await _save_preference_section("visibility", payload, user, db)}
+
+
+@router.get("/preferences/memory", response_model=MemoryPreferencesResponse)
+async def get_memory_preferences(user: User = Depends(get_current_user)):
+    existing = user.preferences if isinstance(user.preferences, dict) else {}
+    memory = MemoryPreferences.model_validate(existing.get("memory") or {})
+    return {"preferences": memory.model_dump()}
+
+
+@router.put("/preferences/memory", response_model=MemoryPreferencesResponse)
+async def save_memory_preferences(
+    payload: MemoryPreferences,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    original = user.preferences
+    existing = dict(original) if isinstance(original, dict) else {}
+    existing["memory"] = payload.model_dump()
+    user.preferences = existing
+    try:
+        await db.commit()
+    except Exception as exc:
+        try:
+            await db.rollback()
+        except Exception as rollback_exc:
+            memory_logger.error(
+                "memory preference rollback failed user_id=%s error_type=%s",
+                user.id,
+                type(rollback_exc).__name__,
+            )
+        user.preferences = original
+        memory_logger.error(
+            "memory preference write failed user_id=%s error_type=%s",
+            user.id,
+            type(exc).__name__,
+        )
+        raise HTTPException(status_code=500, detail="记忆偏好暂时无法保存") from None
+    return {"preferences": payload.model_dump()}

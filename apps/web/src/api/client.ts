@@ -394,6 +394,103 @@ export async function savePreferences(preferences: UserPreferences): Promise<Use
   return data.preferences ?? {}
 }
 
+// ── 长期记忆 API ──────────────────────────────
+
+export type MemoryCategory = 'learning_goal' | 'program_preference' | 'interest_strength' |
+  'study_constraint' | 'career_goal' | 'confirmed_plan'
+
+export interface UserMemory {
+  id: string
+  category: MemoryCategory
+  content: string
+  importance: number
+  source_conversation_id: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface MemoryInput {
+  category: MemoryCategory
+  content: string
+  importance: number
+}
+
+export interface MemoryPage {
+  items: UserMemory[]
+  next_cursor: string | null
+}
+
+export interface MemoryPreferences {
+  auto_capture_enabled: boolean
+}
+
+export class MemoryApiError extends Error {
+  readonly status: number
+
+  constructor(status: number, message: string) {
+    super(message)
+    this.name = 'MemoryApiError'
+    this.status = status
+  }
+}
+
+async function memoryJsonResponse<T>(res: Response, fallback: string): Promise<T> {
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new MemoryApiError(res.status, fallback)
+  return data as T
+}
+
+export async function fetchMemories(category?: MemoryCategory, cursor?: string): Promise<MemoryPage> {
+  const query = new URLSearchParams()
+  if (category) query.set('category', category)
+  if (cursor) query.set('cursor', cursor)
+  const suffix = query.size ? `?${query.toString()}` : ''
+  const res = await fetch(`${BASE}/memories${suffix}`, { headers: authHeaders() })
+  return memoryJsonResponse<MemoryPage>(res, '记忆列表加载失败')
+}
+
+export async function createMemory(input: MemoryInput): Promise<UserMemory> {
+  const res = await fetch(`${BASE}/memories`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify(input),
+  })
+  return memoryJsonResponse<UserMemory>(res, '记忆保存失败')
+}
+
+export async function updateMemory(id: string, input: Partial<MemoryInput>): Promise<UserMemory> {
+  const res = await fetch(`${BASE}/memories/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify(input),
+  })
+  return memoryJsonResponse<UserMemory>(res, '记忆更新失败')
+}
+
+export async function deleteMemory(id: string): Promise<void> {
+  const res = await fetch(`${BASE}/memories/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  })
+  await memoryJsonResponse<void>(res, '记忆删除失败')
+}
+
+export async function fetchMemoryPreferences(): Promise<MemoryPreferences> {
+  const res = await fetch(`${BASE}/preferences/memory`, { headers: authHeaders() })
+  const data = await memoryJsonResponse<{ preferences: MemoryPreferences }>(res, '自动记忆设置加载失败')
+  return data.preferences
+}
+
+export async function saveMemoryPreferences(input: MemoryPreferences): Promise<MemoryPreferences> {
+  const res = await fetch(`${BASE}/preferences/memory`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify(input),
+  })
+  const data = await memoryJsonResponse<{ preferences: MemoryPreferences }>(res, '自动记忆设置保存失败')
+  return data.preferences
+}
+
 export async function submitFeedback(payload: {
   feedback_type: string
   content: string

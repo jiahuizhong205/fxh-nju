@@ -1,9 +1,12 @@
 import asyncio
+import json
 from pathlib import Path
 import unittest
 from unittest.mock import patch
+from uuid import uuid4
 
-from apps.api.routes.chat import invoke_graph_with_timeout
+from apps.api.routes.chat import _stream_answer, invoke_graph_with_timeout
+from fastapi import BackgroundTasks
 from services.agent_runtime.policy_agent import PolicyAgent
 from services.rag.retrieval import build_context
 
@@ -21,6 +24,23 @@ class _SlowGraph:
     async def ainvoke(self, _state, _config):
         await asyncio.sleep(0.02)
         return {}
+
+
+class _FailingPersistenceDb:
+    def __init__(self):
+        self.rollback_count = 0
+
+    def add(self, _item):
+        pass
+
+    async def execute(self, _statement):
+        return None
+
+    async def commit(self):
+        raise RuntimeError("database unavailable")
+
+    async def rollback(self):
+        self.rollback_count += 1
 
 
 class AgentResilienceTests(unittest.TestCase):
@@ -51,6 +71,18 @@ class AgentResilienceTests(unittest.TestCase):
             with self.assertRaises(asyncio.TimeoutError):
                 asyncio.run(invoke_graph_with_timeout(_SlowGraph(), {}, {}))
 
+    def test_mock_summary_never_calls_external_model(self) -> None:
+        from services.memory.summarizer import generate_conversation_summary
+        from tests.test_conversation_memory import make_snapshots
+
+        with patch("services.memory.summarizer.create_chat_model", side_effect=AssertionError("external model")):
+            with patch("services.memory.summarizer.settings.mock_llm", True):
+                result = asyncio.run(generate_conversation_summary(
+                    "目标：新闻辅修", make_snapshots([("user", "大二开始"), ("assistant", "先核对课程")]),
+                ))
+        self.assertIn("新闻辅修", result)
+        self.assertIn("大二", result)
+
     def test_policy_context_is_bounded_before_model_generation(self) -> None:
         chunks = [{
             "document_title": "测试政策",
@@ -64,12 +96,34 @@ class AgentResilienceTests(unittest.TestCase):
         self.assertLessEqual(len(context), 200)
         self.assertIn("【来源1】测试政策", context)
 
-    def test_chat_finalizes_when_history_persistence_fails(self) -> None:
-        source = (self.ROOT / "apps/api/routes/chat.py").read_text(encoding="utf-8")
+    def test_chat_finalizes_without_scheduling_when_history_persistence_fails(self) -> None:
+        background = BackgroundTasks()
+        db = _FailingPersistenceDb()
 
-        self.assertIn("chat answer persistence failed", source)
-        self.assertIn("await db.rollback()", source)
-        self.assertIn("event: final", source)
+        async def collect_events():
+            return [event async for event in _stream_answer(
+                db=db,
+                thread_id=uuid4(),
+                query="请记住我偏好下午上课",
+                conversation_id=uuid4(),
+                user_id=uuid4(),
+                latest_user_message_id=uuid4(),
+                background_tasks=background,
+            )]
+
+        with (
+            patch("apps.api.routes.chat.settings.mock_llm", True),
+            patch("apps.api.routes.chat.detect_injection", return_value=False),
+            self.assertLogs("fuxiaohe.chat", level="ERROR"),
+        ):
+            events = asyncio.run(collect_events())
+
+        final = json.loads(
+            next(event for event in events if event.startswith("event: final")).split("data: ", 1)[1]
+        )
+        self.assertIn("未能写入会话历史", final["warnings"][-1])
+        self.assertEqual(db.rollback_count, 1)
+        self.assertEqual(len(background.tasks), 0)
 
     def test_frontend_exposes_stream_failure_and_recovers_stale_route_assets(self) -> None:
         chat = (self.ROOT / "apps/web/src/views/ChatView.vue").read_text(encoding="utf-8")

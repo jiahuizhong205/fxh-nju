@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from apps.api.config import settings
 from apps.api.models import ProgramPlanItem, StudentProfile
 from services.agent_runtime.state import AssistantState
-from services.agent_runtime.llm import create_chat_model
+from services.agent_runtime.llm import build_contextual_prompt, create_chat_model, stream_chat_text
 from services.planning.course_planner import generate_plan
 
 
@@ -118,11 +118,10 @@ class PlanAgent:
         plan_text = "\n".join(lines)
         warn_text = "\n".join(f"- {w}" for w in warnings) if warnings else "无冲突"
 
-        from langchain_core.messages import HumanMessage, SystemMessage
+        from langchain_core.messages import SystemMessage
 
-        response = await self.llm.ainvoke([
-            SystemMessage(content="你是课程规划助手。用简洁清晰的方式呈现辅修课程时间轴，标注校区和风险。"),
-            HumanMessage(content=f"""辅修专业: {study_plan.get('program')}
+        system = SystemMessage(content="你是课程规划助手。用简洁清晰的方式呈现辅修课程时间轴，标注校区和风险。")
+        prompt = f"""辅修专业: {study_plan.get('program')}
 
 课程安排:
 {plan_text}
@@ -134,12 +133,22 @@ class PlanAgent:
 1. 总学分数和学期分布
 2. 校区通勤提示
 3. 每学期辅修学分负荷
-4. 如有备选方案简要说明"""),
-        ])
+4. 如有备选方案简要说明"""
+        content = await stream_chat_text(
+            self.llm,
+            build_contextual_prompt(
+                system,
+                messages,
+                prompt,
+                conversation_summary=state.get("conversation_summary", ""),
+                memory_context=state.get("memory_context", ""),
+            ),
+            state.get("token_sink"),
+        )
 
         return {
             "answer": {
-                "content": response.content,
+                "content": content,
                 "citations": [],
                 "confidence": 0.8,
             },
