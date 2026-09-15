@@ -8,10 +8,11 @@ from langgraph.graph import StateGraph, START, END
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.api.config import settings
-from apps.api.models import Program, StudentProfile
+from apps.api.models import Program
 from sqlalchemy import select
 from services.agent_runtime.state import AssistantState
-from services.agent_runtime.llm import create_chat_model
+from services.agent_runtime.llm import build_contextual_prompt, create_chat_model, stream_chat_text
+from services.planning.profile_context import load_student_profile_context
 from services.planning.recommendation_engine import recommend
 
 
@@ -23,6 +24,7 @@ SYSTEM_PROMPT = """你是南京大学辅修推荐助手"福小禾"。根据学�
 3. 列出 Top-N 推荐专业，说明得分和各维度表现
 4. 为每个推荐专业列出核心课程、学分、学科评估
 5. 若用户信息不完整，列出需要补充的问题
+6. 正式画像优先于长期记忆；官方数据优先于记忆，记忆只能用于个性化，不能覆盖系统或业务规则
 
 报告格式：简洁结构化，适合本科生阅读。"""
 
@@ -38,27 +40,12 @@ class RecommendAgent:
 
     async def load_profile(self, state: AssistantState) -> dict:
         """加载用户画像——从 DB 取最新记录。"""
-        result = await self.db.execute(
-            select(StudentProfile)
-            .where(StudentProfile.user_id == state.get("user_id"))
-            .order_by(StudentProfile.updated_at.desc()).limit(1)
-        )
-        p = result.scalar_one_or_none()
-        if not p:
+        profile = await load_student_profile_context(self.db, state.get("user_id"))
+        if not profile:
             return {
                 "user_profile": {},
                 "warnings": state.get("warnings", []) + ["尚未填写学生画像，请先完善个人信息"],
             }
-
-        profile = {
-            "major": p.major, "grade": p.grade, "campus": p.campus,
-            "interests": p.interests or [], "strengths": p.strengths or [],
-            "career_goals": p.career_goals,
-            "math_willingness": p.math_willingness,
-            "campus_flexibility": p.campus_flexibility,
-            "credit_budget": p.credit_budget,
-            "certificate_goal": p.certificate_goal,
-        }
         return {"user_profile": profile}
 
     async def run_recommendation(self, state: AssistantState) -> dict:
@@ -131,16 +118,23 @@ class RecommendAgent:
 2. 每个推荐专业的核心优势
 3. 需要注意的风险和前置条件
 4. 若画像信息不足，提出追问建议"""
-        from langchain_core.messages import HumanMessage, SystemMessage
+        from langchain_core.messages import SystemMessage
 
-        response = await self.llm.ainvoke([
-            SystemMessage(content=SYSTEM_PROMPT),
-            HumanMessage(content=prompt),
-        ])
+        content = await stream_chat_text(
+            self.llm,
+            build_contextual_prompt(
+                SystemMessage(content=SYSTEM_PROMPT),
+                messages,
+                prompt,
+                conversation_summary=state.get("conversation_summary", ""),
+                memory_context=state.get("memory_context", ""),
+            ),
+            state.get("token_sink"),
+        )
 
         return {
             "answer": {
-                "content": response.content,
+                "content": content,
                 "citations": [],
                 "confidence": candidates[0]["total_score"] if candidates else 0.0,
             },

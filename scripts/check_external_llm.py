@@ -1,5 +1,13 @@
 """在不写入用户数据的前提下验证外部 OpenAI 兼容 LLM 与 embedding 配置。"""
 
+from pathlib import Path
+import sys
+
+
+REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+if str(REPOSITORY_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPOSITORY_ROOT))
+
 from services.agent_runtime.llm import create_chat_model
 from apps.api.config import settings
 from services.rag.retrieval import embed_text

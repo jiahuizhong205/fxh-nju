@@ -5,7 +5,7 @@ import json
 import logging
 from uuid import uuid4, UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update
@@ -15,11 +15,14 @@ from apps.api.config import settings
 from apps.api.models import Conversation, Message, User, utcnow
 from apps.api.routes.auth import get_current_user
 from packages.contracts.schemas import ChatRequest, AssistantAnswer
+from services.memory.conversation import load_conversation_context
+from services.memory import maintenance as memory_maintenance
+from services.memory.maintenance import memory_auto_capture_enabled
+from services.memory.retrieval import format_memory_context, retrieve_relevant_memories
 from services.security.input_guard import detect_injection
 
 router = APIRouter()
 logger = logging.getLogger("fuxiaohe.chat")
-
 
 async def invoke_graph_with_timeout(graph, state, config):
     """为整条智能体链路设置边界，避免 SSE 无期限挂起。"""
@@ -27,6 +30,40 @@ async def invoke_graph_with_timeout(graph, state, config):
         graph.ainvoke(state, config),
         timeout=settings.agent_response_timeout_seconds,
     )
+
+
+async def stream_graph_events(graph, state, config):
+    """并发运行图，把模型片段和最终结果按产生顺序交给 SSE。"""
+    queue: asyncio.Queue[tuple[str, object]] = asyncio.Queue()
+
+    async def emit_token(content: str) -> None:
+        if content:
+            await queue.put(("token", content))
+
+    async def run_graph() -> None:
+        try:
+            streamed_state = {**state, "token_sink": emit_token}
+            result = await invoke_graph_with_timeout(graph, streamed_state, config)
+            await queue.put(("result", result))
+        except BaseException as exc:
+            await queue.put(("error", exc))
+
+    task = asyncio.create_task(run_graph())
+    try:
+        while True:
+            event_type, payload = await queue.get()
+            if event_type == "error":
+                raise payload
+            yield event_type, payload
+            if event_type == "result":
+                break
+    finally:
+        if not task.done():
+            task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
 
 
 def _mock_result(query: str, intent: str, knowledge_context: dict | None = None) -> dict:
@@ -54,14 +91,20 @@ async def _stream_answer(
     intent: str = "policy",
     knowledge_context: dict | None = None,
     user_id: UUID | None = None,
+    user_preferences: dict | None = None,
+    latest_user_message_id: UUID | None = None,
+    background_tasks: BackgroundTasks | None = None,
 ):
     config = {"configurable": {"thread_id": str(thread_id)}}
+    streamed_tokens = False
+    injection_rejected = False
 
     # node_update: 开始检索
     yield f"event: node_update\ndata: {json.dumps({'node': 'retrieve', 'status': 'running', 'message': '正在检索政策文档...'}, ensure_ascii=False)}\n\n"
 
     try:
         if detect_injection(query):
+            injection_rejected = True
             result = {
                 "answer": {"content": SAFE_REPLY, "citations": []},
                 "confidence": 0.0,
@@ -70,20 +113,56 @@ async def _stream_answer(
         elif settings.mock_llm:
             result = _mock_result(query, intent, knowledge_context)
         else:
-            from langchain_core.messages import HumanMessage
-
             from services.agent_runtime.graph import RootGraph
             from services.agent_runtime.state import AssistantState
 
             graph = RootGraph(db).compiled
+            context = await load_conversation_context(db, conversation_id)
+            messages = context.messages
+            if not messages:
+                from langchain_core.messages import HumanMessage
+
+                messages = [HumanMessage(content=query)]
+            memory_context = ""
+            if user_id is not None and memory_auto_capture_enabled(user_preferences or {}):
+                try:
+                    memories = await retrieve_relevant_memories(db, user_id, query, intent)
+                    memory_context = format_memory_context(
+                        memories,
+                        settings.memory_context_character_budget,
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "chat memory retrieval failed conversation_id=%s user_id=%s error_type=%s",
+                        conversation_id,
+                        user_id,
+                        type(exc).__name__,
+                    )
+                    try:
+                        await db.rollback()
+                    except Exception as rollback_exc:
+                        logger.error(
+                            "chat memory retrieval rollback failed conversation_id=%s user_id=%s "
+                            "error_type=%s",
+                            conversation_id,
+                            user_id,
+                            type(rollback_exc).__name__,
+                        )
             state: AssistantState = {
                 "user_id": str(user_id),
-                "messages": [HumanMessage(content=query)],
+                "messages": messages,
                 "intent": intent,
                 "knowledge_context": knowledge_context or {},
+                "conversation_summary": context.summary,
+                "memory_context": memory_context,
             }
             yield f"event: node_update\ndata: {json.dumps({'node': 'generate', 'status': 'running', 'message': '正在根据政策原文生成回答...'}, ensure_ascii=False)}\n\n"
-            result = await invoke_graph_with_timeout(graph, state, config)
+            async for event_type, payload in stream_graph_events(graph, state, config):
+                if event_type == "token":
+                    streamed_tokens = True
+                    yield f"event: token\ndata: {json.dumps({'content': payload}, ensure_ascii=False)}\n\n"
+                else:
+                    result = payload
     except asyncio.TimeoutError:
         logger.warning("chat generation timed out after %ss", settings.agent_response_timeout_seconds)
         yield f"event: error\ndata: {json.dumps({'message': '本次回答耗时过长，请稍后重试或缩短问题后再试'}, ensure_ascii=False)}\n\n"
@@ -103,8 +182,9 @@ async def _stream_answer(
         # node_update: 检索完成
         yield f"event: node_update\ndata: {json.dumps({'node': 'retrieve', 'status': 'completed', 'message': f'检索到 {len(citations)} 条相关文档'}, ensure_ascii=False)}\n\n"
 
-        # token: 逐段输出（简化：整段输出）
-        yield f"event: token\ndata: {json.dumps({'content': content}, ensure_ascii=False)}\n\n"
+        # 无模型片段的 mock、拒答和确定性回答仍发送一次完整内容。
+        if not streamed_tokens:
+            yield f"event: token\ndata: {json.dumps({'content': content}, ensure_ascii=False)}\n\n"
 
         # citation
         for cit in citations:
@@ -113,7 +193,9 @@ async def _stream_answer(
         # 会话留痕不应影响已经生成的回答。否则持久化异常会让 SSE 无 final 事件，
         # 前端只能一直停留在“正在检索”。
         try:
+            assistant_message_id = uuid4()
             msg = Message(
+                id=assistant_message_id,
                 conversation_id=conversation_id,
                 role="assistant",
                 content=content,
@@ -126,7 +208,9 @@ async def _stream_answer(
                 .values(updated_at=utcnow())
             )
             await db.commit()
+            answer_persisted = True
         except Exception:
+            answer_persisted = False
             logger.exception("chat answer persistence failed")
             try:
                 await db.rollback()
@@ -141,6 +225,34 @@ async def _stream_answer(
             "warnings": warnings,
         }
         yield f"event: final\ndata: {json.dumps(final, ensure_ascii=False)}\n\n"
+
+        # StreamingResponse resumes the generator after sending the final chunk,
+        # then executes its BackgroundTasks after normal iteration completes.
+        if (
+            answer_persisted
+            and not injection_rejected
+            and background_tasks is not None
+            and user_id is not None
+            and latest_user_message_id is not None
+        ):
+            try:
+                background_tasks.add_task(
+                    memory_maintenance.refresh_memory_state,
+                    conversation_id,
+                    user_id,
+                    latest_user_message_id,
+                    assistant_message_id,
+                )
+            except Exception as exc:
+                logger.error(
+                    "memory maintenance scheduling failed conversation_id=%s user_id=%s "
+                    "user_message_id=%s assistant_message_id=%s error_type=%s",
+                    conversation_id,
+                    user_id,
+                    latest_user_message_id,
+                    assistant_message_id,
+                    type(exc).__name__,
+                )
     except Exception:
         logger.exception("chat response finalization failed")
         yield f"event: error\ndata: {json.dumps({'message': '回答已生成但传输失败，请稍后重试'}, ensure_ascii=False)}\n\n"
@@ -149,6 +261,7 @@ async def _stream_answer(
 @router.post("/chat")
 async def chat(
     request: ChatRequest,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -177,7 +290,13 @@ async def chat(
         conversation_id = conv.id
 
     # 保存用户消息
-    user_msg = Message(conversation_id=conversation_id, role="user", content=request.message)
+    user_message_id = uuid4()
+    user_msg = Message(
+        id=user_message_id,
+        conversation_id=conversation_id,
+        role="user",
+        content=request.message,
+    )
     db.add(user_msg)
     await db.commit()
 
@@ -189,13 +308,16 @@ async def chat(
 
     return StreamingResponse(
         _stream_answer(
-            db,
-            thread_id,
-            request.message,
-            conversation_id,
-            request.intent or "policy",
-            knowledge_context if any(knowledge_context.values()) else None,
-            user.id,
+            db=db,
+            thread_id=thread_id,
+            query=request.message,
+            conversation_id=conversation_id,
+            intent=request.intent or "policy",
+            knowledge_context=knowledge_context if any(knowledge_context.values()) else None,
+            user_id=user.id,
+            user_preferences=user.preferences,
+            latest_user_message_id=user_message_id,
+            background_tasks=background_tasks,
         ),
         media_type="text/event-stream",
         headers={

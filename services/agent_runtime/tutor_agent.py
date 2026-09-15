@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from apps.api.config import settings
 from apps.api.models import StudentProfile
 from services.agent_runtime.state import AssistantState
-from services.agent_runtime.llm import create_chat_model
+from services.agent_runtime.llm import build_contextual_prompt, create_chat_model, stream_chat_text
 from services.rag.knowledge_graph import get_knowledge_tree
 
 
@@ -130,14 +130,21 @@ class TutorAgent:
 3. 对每个阶段提出一个可操作的学习任务
 4. 语气鼓励、像学长学姐一样"""
 
-        from langchain_core.messages import HumanMessage, SystemMessage
+        from langchain_core.messages import SystemMessage
 
-        response = await self.llm.ainvoke([
-            SystemMessage(content=TUTOR_SYSTEM),
-            HumanMessage(content=prompt),
-        ])
+        content = await stream_chat_text(
+            self.llm,
+            build_contextual_prompt(
+                SystemMessage(content=TUTOR_SYSTEM),
+                messages,
+                prompt,
+                conversation_summary=state.get("conversation_summary", ""),
+                memory_context=state.get("memory_context", ""),
+            ),
+            state.get("token_sink"),
+        )
 
-        return {"answer": {"content": response.content, "citations": [], "confidence": 0.75}}
+        return {"answer": {"content": content, "citations": [], "confidence": 0.75}}
 
     def build(self) -> StateGraph:
         builder = StateGraph(AssistantState)

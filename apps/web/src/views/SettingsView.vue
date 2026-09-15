@@ -35,6 +35,7 @@ const groups = [
   {
     title: '🏺 数据与存储',
     items: [
+      { to: '/settings/memory', label: '我的记忆', desc: '管理福小禾长期记住的内容' },
       { to: '/settings/clear-cache', label: '清除缓存', desc: '🍂 扫走枯叶' },
       { to: '/settings/data-sync', label: '数据同步', desc: '☁️ 种子备份云' },
     ],

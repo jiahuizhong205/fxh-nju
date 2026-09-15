@@ -6,7 +6,12 @@ from pgvector.sqlalchemy import Vector
 from apps.api.config import settings
 from apps.api.migrations import apply_migrations
 
-engine = create_async_engine(settings.database_url, pool_size=10, max_overflow=5)
+engine = create_async_engine(
+    settings.database_url,
+    pool_size=10,
+    max_overflow=5,
+    hide_parameters=True,
+)
 async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 

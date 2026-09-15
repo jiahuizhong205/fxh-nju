@@ -96,10 +96,18 @@ class LlmProviderConfigTests(unittest.TestCase):
             (self.ROOT / f"services/agent_runtime/{name}").read_text(encoding="utf-8")
             for name in ("recommend_agent.py", "plan_agent.py", "tutor_agent.py", "career_agent.py")
         )
+        profile_context = (
+            self.ROOT / "services/planning/profile_context.py"
+        ).read_text(encoding="utf-8")
 
         self.assertIn('"user_id": str(user_id)', chat)
         self.assertIn("user_id: str", state)
-        self.assertGreaterEqual(agents.count("StudentProfile.user_id == state.get(\"user_id\")"), 4)
+        self.assertEqual(agents.count("StudentProfile.user_id == state.get(\"user_id\")"), 3)
+        self.assertIn(
+            "load_student_profile_context(self.db, state.get(\"user_id\"))",
+            agents,
+        )
+        self.assertIn("StudentProfile.user_id == user_id", profile_context)
         self.assertNotIn("PROGRAM_PLANS", agents)
         self.assertNotIn("match_jobs(major, minor)", agents)
 

@@ -5,14 +5,30 @@ from __future__ import annotations
 import asyncio
 import argparse
 import json
+from pathlib import Path
 import secrets
+import sys
 
 import httpx
 from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+
+REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+if str(REPOSITORY_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPOSITORY_ROOT))
+
 from apps.api.config import settings
 from apps.api.models import Job, User
+
+
+AGENT_CHECKS = (
+    ("policy", "辅修达到多少学分可以申请结业证明？"),
+    ("recommend", "请结合我的画像推荐适合的辅修方向。"),
+    ("schedule", "请为汉语言文学制定课程规划。"),
+    ("tutor", "请用通俗方式讲解新闻采访的基本知识。"),
+    ("career", "我主修汉语言文学并考虑新闻学，想了解适合的实习岗位。"),
+)
 
 
 async def cleanup(username: str, job_id: str) -> None:
@@ -35,14 +51,12 @@ def final_content(sse_body: str, intent: str) -> str:
     lines = sse_body.splitlines()
     for index, line in enumerate(lines):
         if line == "event: error" and index + 1 < len(lines) and lines[index + 1].startswith("data: "):
-            payload = json.loads(lines[index + 1][6:])
-            raise AssertionError(f"{intent} 智能体返回错误事件：{payload.get('message', '未提供详情')}")
+            raise AssertionError(f"{intent} 智能体返回错误事件")
         if line == "event: final" and index + 1 < len(lines) and lines[index + 1].startswith("data: "):
             content = json.loads(lines[index + 1][6:]).get("content", "").strip()
             if content and "模型服务暂不可用" not in content:
                 return content
-    tail = " ".join(sse_body.split())[-1000:]
-    raise AssertionError(f"{intent} 智能体未返回有效最终内容；SSE末尾：{tail or '（空响应）'}")
+    raise AssertionError(f"{intent} 智能体未返回有效最终内容")
 
 
 async def insert_test_job(job_id: str) -> None:
@@ -89,19 +103,15 @@ async def verify(intent_filter: str = "") -> None:
             }), "保存画像")
             await insert_test_job(job_id)
 
-            checks = [
-                ("policy", "辅修达到多少学分可以申请结业证明？"),
-                ("recommend", "请结合我的画像推荐适合的辅修方向。"),
-                ("schedule", "请为汉语言文学制定课程规划。"),
-                ("tutor", "请用通俗方式讲解新闻采访的基本知识。"),
-                ("career", "我主修汉语言文学并考虑新闻学，想了解适合的实习岗位。"),
-            ]
+            checks = list(AGENT_CHECKS)
             if intent_filter:
                 checks = [item for item in checks if item[0] == intent_filter]
             for intent, message in checks:
                 result = await client.post("/api/v1/chat", headers=headers, json={
                     "message": message, "intent": intent,
                 })
+                if result.status_code != 200:
+                    raise AssertionError(f"{intent} 智能体请求失败：HTTP {result.status_code}")
                 content = final_content(result.text, intent)
                 print(f"PASS {intent}: {len(content)} chars")
     finally:

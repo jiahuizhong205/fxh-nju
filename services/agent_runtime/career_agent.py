@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from apps.api.config import settings
 from apps.api.models import Job, StudentProfile
 from services.agent_runtime.state import AssistantState
-from services.agent_runtime.llm import create_chat_model
+from services.agent_runtime.llm import build_contextual_prompt, create_chat_model, stream_chat_text
 from services.planning.career_engine import match_jobs
 
 
@@ -95,11 +95,9 @@ class CareerAgent:
             for i, m in enumerate(matches[:3])
         )
 
-        from langchain_core.messages import HumanMessage, SystemMessage
+        from langchain_core.messages import SystemMessage
 
-        response = await self.llm.ainvoke([
-            SystemMessage(content=CAREER_SYSTEM),
-            HumanMessage(content=f"""学生画像:
+        prompt = f"""学生画像:
   主修: {profile.get('major', '未知')}
   职业目标: {profile.get('career_goals', '未填写')}
   学生问题: {query}
@@ -111,10 +109,20 @@ class CareerAgent:
 1. 推荐岗位总结和匹配度说明
 2. 简历优化建议（如何突出复合背景）
 3. 投递准备建议
-4. 若画像不完整，提示补充方向"""),
-        ])
+4. 若画像不完整，提示补充方向"""
+        content = await stream_chat_text(
+            self.llm,
+            build_contextual_prompt(
+                SystemMessage(content=CAREER_SYSTEM),
+                messages,
+                prompt,
+                conversation_summary=state.get("conversation_summary", ""),
+                memory_context=state.get("memory_context", ""),
+            ),
+            state.get("token_sink"),
+        )
 
-        return {"answer": {"content": response.content, "citations": [], "confidence": 0.7}}
+        return {"answer": {"content": content, "citations": [], "confidence": 0.7}}
 
     def build(self) -> StateGraph:
         builder = StateGraph(AssistantState)

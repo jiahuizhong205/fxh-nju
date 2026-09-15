@@ -2,6 +2,15 @@
 
 基于 LangGraph 多智能体 + RAG 的一站式跨学科成长助手，覆盖辅修政策答疑、专业推荐、课程规划、伴学辅导、职业探索全流程。
 
+在线体验：[http://101.132.23.129:8080](http://101.132.23.129:8080)
+
+## 界面预览
+
+| 登录 | 首页 |
+|------|------|
+| ![登录界面](picture/login.png) | ![首页](picture/home.png) |
+
+
 ## 项目背景
 
 项目面向南京大学本科生的跨学科学习场景。辅修选择通常涉及培养方案理解、课程冲突、校区安排和信息分散等问题，福小禾希望串联「决策—规划—学习—就业」流程。项目不再展示缺少可追溯来源的统计数字。
@@ -28,7 +37,7 @@
 
 ## 当前交接状态
 
-截至 `dev` 分支当前版本，完整的新用户体验路径为：注册 → 两阶段引导与画像填写（支持真实专业目录和头像）→ 首页 → 专业推荐 / 课程规划 / 政策答疑 / 伴学 / 职业探索。所有页面共用返回逻辑，聊天会先显示用户消息，再以 SSE 显示检索与回答状态。
+截至 `dev` 分支当前版本，完整的新用户体验路径为：注册 → 两阶段引导与画像填写（支持真实专业目录和头像）→ 首页 → 专业推荐 / 课程规划 / 政策答疑 / 伴学 / 职业探索；聊天和长期记忆链路已接入。所有页面共用返回逻辑，聊天会先显示用户消息，再以 SSE 显示检索与回答状态。
 
 已完成的关键实现如下：
 
@@ -40,6 +49,8 @@
 - 设置、通知偏好、学习提醒、职业推送偏好、时间偏好、冲突处理、缓存、同步、反馈和学习进度页面已有本地持久化接口。
 
 目前仍是**可体验的 MVP**，不是正式生产系统：真实短信/邮件投递、异地登录风控、第三方云同步、文件安全扫描和对象存储仅预留 provider 接口，未配置供应商时会安全降级或保持 queued；知识树可视化、实时网页搜索和 Neo4j 图谱也尚未启用。
+
+记忆系统当前已实现“摘要 + 长期记忆”闭环，但仍有明确边界：真实 LLM/Embedding 的线上验收需要配置外部供应商；记忆删除是不可恢复的硬删除；知识树、实时网页搜索和 Neo4j 图谱不属于本次记忆系统合并范围。
 
 ## 架构概览
 
@@ -186,6 +197,107 @@ docker compose --env-file .env.production -f infra/compose/docker-compose.prod.y
 docker compose --env-file .env.production -f infra/compose/docker-compose.prod.yml \
   exec -T api python scripts/verify_real_llm_agents.py --intent policy
 ```
+
+## 对话摘要与长期记忆运维
+
+### 配置、模式与迁移
+
+长期记忆继续使用唯一的 `MOCK_LLM` 模式开关，不另设 Mock LLM 或 Mock Embedding
+开关。以下变量均已列入 `.env.example` 和 `.env.production.example`：
+
+| 变量 | 默认值 | 作用 |
+|---|---:|---|
+| `CHAT_RECENT_TURN_LIMIT` | `5` | 原始上下文最多保留的最近完整问答轮数 |
+| `CHAT_CONTEXT_CHARACTER_BUDGET` | `12000` | 原始消息、摘要以及摘要输入的字符上限 |
+| `CHAT_SUMMARY_TRIGGER_CHARACTER_COUNT` | `8000` | 较早完整轮次达到该长度后刷新滚动摘要 |
+| `CHAT_SUMMARY_MAX_CHARACTERS` | `2400` | 持久化摘要的最大字符数 |
+| `MEMORY_RETRIEVAL_LIMIT` | `5` | 每次回答最多注入的长期记忆条数 |
+| `MEMORY_CONTEXT_CHARACTER_BUDGET` | `2000` | 注入智能体的记忆数据字符上限 |
+| `MEMORY_CAPTURE_CONFIDENCE_THRESHOLD` | `0.70` | 自动提取候选的最低置信度 |
+| `MEMORY_BACKGROUND_TIMEOUT_SECONDS` | `45.0` | 单次摘要和记忆维护任务的总超时 |
+
+`MOCK_LLM=true` 时，摘要采用确定性摘录、自动提取采用本地规则、召回采用关键词
+排序，聊天与记忆链路都不会调用外部 LLM 或 Embedding。`MOCK_LLM=false` 时，摘要、
+提取和语义召回使用上文同一组真实 LLM/Embedding 配置；外部维护失败只写入脱敏的
+类型、资源 ID 和耗时日志，不会撤回已经发出的 `final` SSE 回答。
+
+升级已有数据库前先备份，再重启 API。启动时的迁移运行器会按编号原子应用
+`infra/migrations/043_memory_system.sql` 并在 `schema_migrations` 中只记录一次；该迁移
+创建 `conversation_summaries` 与 `user_memories`，向量列固定为 1024 维。不要手工重复
+执行 SQL，也不要用 `docker compose down -v` 处理迁移问题。
+
+记忆向量会记录由模型名、存储维度和 provider `dimensions` 参数组成的 Embedding
+签名。更换 `EMBEDDING_API_MODEL`、`EMBEDDING_DIMENSION` 或
+`EMBEDDING_API_DIMENSIONS` 后，旧签名或空向量的记忆不会与新向量直接比较，而会安全
+降级为关键词、意图、重要性和新鲜度排序；新建、重新编辑或重新捕获的记忆使用当前签名。
+政策文档仍须按上文流程运行 `check_external_llm.py` 与 `reembed_documents.py`。当前数据库
+列是 `vector(1024)`，因此不要只改 `EMBEDDING_DIMENSION`；维度迁移需先修改 schema。
+
+### 安全、捕获与删除语义
+
+自动捕获默认开启，用户可在网页 `/settings/memory` 查看状态、筛选、添加、编辑或删除
+记忆，也可关闭后续自动捕获。只从已完成且成功持久化的用户/助手轮次提取稳定目标、偏好、
+学习限制、兴趣优势、职业目标和已确认计划；问题、临时安排、第三方事实和不稳定陈述不会
+直接形成长期记忆。关闭自动捕获后，聊天不再检索或新增长期记忆，但既有记录仍可在管理页
+查看和手动处理。
+
+密码、验证码、API key、访问令牌、private/client secret、私钥和高熵凭证即使由用户明确
+要求也会拒绝保存。提示词注入样式的记忆在注入上下文前会再次过滤；进入智能体的记忆被标成
+“未经验证的用户背景”数据，不能覆盖系统规则。服务日志不得记录 token、密码、完整记忆正文
+或完整 SSE 响应。
+
+`DELETE /api/v1/memories/{memory_id}` 是不可恢复的硬删除：正文和向量在同一个、按当前用户
+限定的事务中一起删除。删除账号时，数据库外键级联清除该用户的会话、消息、摘要、长期记忆
+和会话凭据；烟测也依赖此语义在 `finally` 中清理随机临时账号。运维人员不要用跨用户 SQL
+代替这些受认证接口。
+
+### API 与故障隔离
+
+以下路径都位于 `/api/v1`、要求 `Authorization: Bearer ...`，且只返回当前用户的数据：
+
+| 方法与路径 | 行为 |
+|---|---|
+| `GET /memories?category=&cursor=&limit=` | 按更新时间游标分页列出记忆，响应为 `{items,next_cursor}` |
+| `POST /memories` | 手动创建记忆，成功为 HTTP 201 |
+| `GET /memories/{memory_id}` | 读取单条记忆 |
+| `PATCH /memories/{memory_id}` | 修改分类、正文或重要性 |
+| `DELETE /memories/{memory_id}` | 硬删除单条记忆，成功为 HTTP 204 |
+| `GET /preferences/memory` | 读取 `{preferences:{auto_capture_enabled}}` |
+| `PUT /preferences/memory` | 保存自动捕获开关 |
+
+聊天接口仍是 `POST /api/v1/chat`，会话 ID 仍通过 `X-Conversation-Id` 返回，SSE 事件名和
+数据结构保持 `node_update`、`token`、`citation`、`final`、`error` 不变。摘要生成、自动
+提取、Embedding、召回、使用时间写回或后台任务调度任一失败都会回滚自己的事务并被隔离；
+它们不得令已生成的聊天回答丢失 `final` 事件。
+
+### 验证命令
+
+默认离线矩阵不访问外部服务：
+
+```bash
+python -m unittest discover -s tests -p 'test_*.py'
+python scripts/verify_core.py
+python -m compileall apps services packages scripts
+cd apps/web && npm run build
+```
+
+真实烟测是显式 opt-in。运行前必须同时满足：`MOCK_LLM=false`；聊天和 Embedding 的
+base URL、API key、模型名均非空；Embedding 实测返回 1024 维；PostgreSQL/pgvector、
+API 与已按当前签名建立索引的知识库均就绪；API 可从执行脚本的位置访问。随后依次运行：
+
+```bash
+python scripts/check_external_llm.py
+python scripts/verify_real_llm_agents.py
+python scripts/verify_memory_system.py
+
+# 脚本不在 API 宿主机时可显式指定内部地址。
+python scripts/verify_memory_system.py --base-url http://api:8000
+```
+
+`verify_memory_system.py` 创建随机临时用户，验证手动记忆 CRUD、自动提取、非空摘要与已推进
+游标，并在一个新会话中明确要求复述校区和时间偏好；它只输出阶段结果，不输出 token、密码、
+完整记忆或模型回答。成功与失败路径都会硬删除临时用户及其资源。未满足上述前置条件时，应将
+真实 smoke 记录为“未运行”，不能把 Mock 结果报告成真实服务通过。
 
 ## 部署到自己的 Linux 服务器
 

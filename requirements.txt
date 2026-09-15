@@ -4,6 +4,7 @@ langgraph==1.0.1
 langchain-openai==1.6.0
 psycopg[binary]==3.2.3
 asyncpg==0.30.0
+aiosqlite==0.20.0
 pgvector==0.3.6
 redis==5.2.1
 pydantic==2.10.4

@@ -10,12 +10,23 @@ class MigrationContractTests(unittest.TestCase):
         files = migrations.discover_migrations()
 
         self.assertEqual(files[0].name, "001_init.sql")
-        self.assertEqual(files[-1].name, "042_embedding_dimension_1024.sql")
+        self.assertEqual(files[-1].name, "043_memory_system.sql")
+        self.assertEqual(len(files), 43)
         self.assertEqual(len(files), len({path.name for path in files}))
         self.assertEqual(
             [path.name for path in files],
             sorted(path.name for path in files),
         )
+
+    def test_memory_migration_is_latest_and_defines_both_tables(self):
+        files = migrations.discover_migrations()
+
+        self.assertEqual(files[-1].name, "043_memory_system.sql")
+        sql = files[-1].read_text(encoding="utf-8")
+        self.assertIn("CREATE TABLE conversation_summaries", sql)
+        self.assertIn("CREATE TABLE user_memories", sql)
+        self.assertIn("vector(1024)", sql)
+        self.assertIn("UNIQUE (user_id, canonical_key)", sql)
 
     def test_sql_splitter_keeps_semicolons_inside_literals(self):
         statements = migrations.split_sql_statements(
